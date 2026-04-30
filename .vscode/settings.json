@@ -1,0 +1,11 @@
+{
+    "C_Cpp.default.compilerPath": "C:/Users/26326/AppData/Local/Keil_v5/ARM/ARMCLANG/bin/armclang.exe",
+    "C_Cpp.default.intelliSenseMode": "clang-arm",
+    "C_Cpp.default.compilerArgs": [
+        "--target=arm-arm-none-eabi"
+    ],
+    "C_Cpp.default.includePath": [
+        "C:/Users/26326/AppData/Local/Keil_v5/ARM/ARMCLANG/include",
+        "C:/Users/26326/AppData/Local/Keil_v5/ARM/ARMCLANG/include/libcxx"
+    ]
+}
