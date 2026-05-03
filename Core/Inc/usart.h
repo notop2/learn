@@ -44,7 +44,11 @@ void MX_USART1_UART_Init(void);
 void MX_USART2_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+void UART2_DMA_Init(void);
+uint8_t GetFanMode(void);
+int32_t GetManualFanSpeed(void);
+void SetFanMode(uint8_t mode);
+void SetManualFanSpeed(int32_t speed);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

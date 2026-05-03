@@ -1,0 +1,66 @@
+#ifndef __SENSOR_DATA_H
+#define __SENSOR_DATA_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdint.h>
+#include <stdbool.h>
+
+/* 传感器数据结构体 */
+typedef struct {
+    float temperature;    /* 温度 (°C) */
+    float humidity;       /* 湿度 (%RH) */
+    float pressure;       /* 气压 (hPa) */
+    uint16_t light;       /* 光敏电阻值 */
+    uint16_t pm25;        /* PM2.5 值 */
+    bool bme280_valid;    /* BME280 数据有效标志 */
+    bool light_valid;     /* 光敏数据有效标志 */
+    bool pm25_valid;      /* PM2.5 数据有效标志 */
+    uint32_t timestamp;   /* 时间戳 */
+} SensorData_t;
+
+/* 命令类型 */
+typedef enum {
+    CMD_NONE = 0,
+    CMD_GET_DATA,         /* 获取传感器数据 */
+    CMD_SET_MOTOR,        /* 设置电机速度 */
+    CMD_GET_STATUS,       /* 获取系统状态 */
+    CMD_SET_FAN_MODE,     /* 设置风扇模式 (自动/手动) */
+    CMD_GET_VERSION,      /* 获取固件版本 */
+    CMD_MAX
+} CommandType_t;
+
+/* 系统状态结构体 */
+typedef struct {
+    float cpu_temp;        /* CPU 温度 (模拟) */
+    uint32_t uptime;       /* 运行时间 */
+    uint8_t fan_mode;     /* 风扇模式: 0=自动, 1=手动 */
+    int32_t fan_speed;     /* 当前风扇速度 */
+    uint8_t version[16];  /* 版本号 */
+} SystemStatus_t;
+
+/* 命令结构体 */
+typedef struct {
+    CommandType_t type;
+    union {
+        struct {
+            int32_t speed;  /* 电机速度 -100 到 100 */
+        } motor;
+        struct {
+            uint8_t mode;   /* 风扇模式 */
+        } fan;
+        struct {
+            uint8_t index; /* 数据索引 */
+        } query;
+        SystemStatus_t status;
+        uint8_t raw[32];  /* 原始数据 */
+    } data;
+} Command_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __SENSOR_DATA_H */
