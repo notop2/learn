@@ -8,6 +8,7 @@ extern "C" {
 #include "main.h"
 #include "i2c.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 /* BME280 I2C 地址 */
 #define BME280_I2C_ADDR    0x76 << 1

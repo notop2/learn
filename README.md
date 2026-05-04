@@ -5,51 +5,62 @@
 ## 硬件配置
 
 - **核心板**: STM32F103VET6 (ARM Cortex-M3)
-- **操作系统**: FreeRTOS
+- **操作系统**: FreeRTOS + CMSIS-RTOS2
 - **通信接口**: UART1 (有线) / UART2 + HC05 (蓝牙)
 
 ## 外设列表
 
 | 外设 | 接口 | 功能 |
 |------|------|------|
-| LCD 屏幕 | FSMC | 显示传感器数据 |
+| LCD 屏幕 (ILI9341) | FSMC | 显示传感器数据 |
 | HC05 蓝牙模块 | UART2 DMA 空闲中断 | 无线数据传输 |
 | BME280 传感器 | I2C | 温度、湿度、气压采集 |
-| 光敏电阻 | ADC | 环境光线强度采集 |
-| PM2.5 传感器 | ADC | 颗粒物浓度采集 |
+| 光敏电阻 | ADC1 | 环境光线强度采集 |
+| PM2.5 传感器 | ADC1 | 颗粒物浓度采集 |
 | TB6612 电机驱动 | TIM2 PWM | 直流电机/风扇控制 |
 
 ## 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      FreeRTOS                           │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐   │
-│  │ Sensor  │  │  LCD    │  │  UART   │  │  Fan    │   │
-│  │  Task   │  │  Task   │  │  Task   │  │  Task   │   │
-│  └────┬────┘  └────▲────┘  └────▲────┘  └────▲────┘   │
-│       │            │            │            │          │
-│       ▼            │            │            │          │
-│  ┌─────────────────────────────────────────────┐       │
-│  │              dataQueue (消息队列)             │       │
-│  └─────────────────────────────────────────────┘       │
-│                                                         │
-│                        ┌───────┐                       │
-│                        │ Cmd   │                       │
-│                        │ Task  │                       │
-│                        └───┬───┘                       │
-│                            │                           │
-│                    cmdQueue (命令队列)                  │
-└─────────────────────────────────────────────────────────┘
-                            │
-              ┌─────────────┴─────────────┐
-              │                           │
-         UART1 (有线)              HC05 (蓝牙)
-              │                           │
-              ▼                           ▼
-         Linux/PC                   Linux/PC
+┌───────────────────────────────────────────────────────────┐
+│                       FreeRTOS                            │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ Sensor   │  │   LCD    │  │   UART   │  │   Fan    │  │
+│  │  Task    │  │   Task   │  │   Task   │  │   Task   │  │
+│  └────┬─────┘  └────▲─────┘  └────▲─────┘  └────┬─────┘  │
+│       │             │             │             │         │
+│       ▼             │             │             │         │
+│  ┌──────────────────────────────────────────────┐         │
+│  │              dataQueue (消息队列)              │         │
+│  └──────────────────────────────────────────────┘         │
+│                        ┌───────┐                          │
+│                        │  Cmd  │                          │
+│                        │ Task  │                          │
+│                        └───┬───┘                          │
+│                            │                              │
+│                    cmdQueue (命令队列)                      │
+│                            │                              │
+│                  ┌─────────┴─────────┐                    │
+│                  ▼                   ▼                    │
+│           ┌──────────────┐  ┌────────────────┐            │
+│           │   UART TX    │  │  Command Parse  │           │
+│           └──────────────┘  └────────────────┘            │
+│                                                           │
+│  ┌──────────────┐                                         │
+│  │ Monitor Task │──── IWDG 看门狗 (1s超时) ──→ 系统复位      │
+│  └──────────────┘                                         │
+│        │                                                  │
+│        └── 定时检查所有6个任务的心跳                        │
+└───────────────────────────────────────────────────────────┘
+              │
+    ┌─────────┴─────────┐
+    │                   │
+UART1 (有线)      HC05 (蓝牙)
+    │                   │
+    ▼                   ▼
+Linux/PC          Linux/PC/Android
 ```
 
 ## 任务列表
@@ -61,6 +72,40 @@
 | uartTask | Normal | 1024B | 数据上传到 PC |
 | cmdTask | High | 1024B | 处理外部命令 |
 | fanTask | Normal | 1024B | 温度触发风扇控制 |
+| monitorTask | Idle | 512B | 系统监控 + 喂狗 |
+
+## 设计要点
+
+### 滑动平均滤波器
+- 传感器原始数据经过 8 点滑动平均滤波，抑制 BME280 测量噪声
+- 环形缓冲区实现 O(1) 复杂度更新
+- 滤波后数据用于 LCD 显示和风扇控制
+
+### 硬件看门狗 + 任务健康监控
+- IWDG 独立看门狗，1s 超时自动复位
+- Monitor Task 以 2s 周期检查所有 6 个任务的心跳
+- 临界任务连续 3 次超时触发系统停机
+- `GET /status` 返回每个任务存活时间和超时次数
+
+### Flash 参数存储
+- 风扇模式、校准值等系统参数保存到 Flash 末尾页
+- CRC16 (Modbus) 校验数据完整性
+- 写入前擦除整页，写入计数递增
+- 系统上电自动恢复上次配置
+
+### 风扇状态机
+- 5 状态有限状态机控制风扇转速
+- 10s 迟滞时间避免温度边界频繁切换
+- 控制输入使用滤波后数据
+
+### 硬件自检
+- `GET /diag` 触发全系统自检
+- 覆盖项：I2C、ADC、LCD、UART、电机、FSMC、BME280、Flash
+- 返回结构化诊断报告
+
+### 自动版本信息
+- 编译时生成版本字符串（含日期时间）
+- `GET /version` 返回固件标识
 
 ## API 接口协议
 
@@ -71,44 +116,57 @@
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `GET /sensor` | 触发传感器数据上传 | `GET /sensor\r\n` |
-| `GET /status` | 获取系统状态 | `GET /status\r\n` |
+| `GET /status` | 获取系统状态 + 任务健康 | `GET /status\r\n` |
 | `GET /version` | 获取固件版本 | `GET /version\r\n` |
+| `GET /diag` | 运行硬件自检诊断 | `GET /diag\r\n` |
 | `SET /motor?speed=X` | 设置电机速度 (-100~100) | `SET /motor?speed=50\r\n` |
-| `SET /fan?mode=auto` | 设置风扇为自动模式 | `SET /fan?mode=auto\r\n` |
-| `SET /fan?mode=manual` | 设置风扇为手动模式 | `SET /fan?mode=manual\r\n` |
+| `SET /fan?mode=auto` | 设置风扇自动模式 | `SET /fan?mode=auto\r\n` |
+| `SET /fan?mode=manual` | 设置风扇手动模式 | `SET /fan?mode=manual\r\n` |
 
-### Linux 端调用示例
+### Linux 调用示例
 
 ```bash
-# 读取串口设备 (根据实际情况选择 /dev/ttyUSB0 或 /dev/ttyS0)
 SERIAL_PORT=/dev/ttyUSB0
 
-# 获取固件版本
 echo "GET /version" > $SERIAL_PORT
 cat $SERIAL_PORT
 
-# 获取系统状态
 echo "GET /status" > $SERIAL_PORT
 cat $SERIAL_PORT
 
-# 设置电机速度
+echo "GET /diag" > $SERIAL_PORT
+cat $SERIAL_PORT
+
 echo "SET /motor?speed=75" > $SERIAL_PORT
 
-# 切换风扇模式
 echo "SET /fan?mode=auto" > $SERIAL_PORT
 echo "SET /fan?mode=manual" > $SERIAL_PORT
 ```
 
-## 自动风扇控制
+### 自检响应示例
 
-风扇任务根据温度自动调节转速：
+```
+=== DIAG REPORT [356 ms] ===
+  [PASS] I2C_BME280: id=0x60
+  [PASS] ADC: conversion ok
+  [PASS] LCD: color test done
+  [PASS] UART: tx ok
+  [PASS] MOTOR: pwm ok
+  [PASS] FSMC: rw ok
+  [PASS] SENSOR: data ok
+  [PASS] FLASH: param area ok
+=== END ===
+```
 
-| 温度范围 | 风扇速度 |
-|---------|---------|
-| > 35°C | 100% (全速) |
-| 30-35°C | 50% (半速) |
-| 25-30°C | 25% (低速) |
-| < 25°C | 0% (关闭) |
+## 风扇状态机
+
+| 状态 | 转速 | 升迁条件 | 降级条件 |
+|------|------|---------|---------|
+| IDLE | 0% | 温度 > 28°C → LOW | - |
+| LOW | 25% | 温度 > 32°C → MEDIUM | 温度 < 26°C 且 >= 10s → IDLE |
+| MEDIUM | 50% | 温度 > 36°C → HIGH | 温度 < 30°C 且 >= 10s → LOW |
+| HIGH | 75% | 温度 > 40°C → MAX | 温度 < 34°C 且 >= 10s → MEDIUM |
+| MAX | 100% | - | 温度 < 38°C 且 >= 10s → HIGH |
 
 ## 数据格式
 
@@ -122,12 +180,18 @@ echo "SET /fan?mode=manual" > $SERIAL_PORT
 
 ```
 STATUS: fan_mode=0 fan_speed=50 uptime=12345
+[OK] sensor: alive=500 misses=0
+[OK] lcd: alive=499 misses=0
+[OK] uart: alive=501 misses=0
+[OK] cmd: alive=498 misses=0
+[OK] fan: alive=500 misses=0
+[OK] monitor: alive=2000 misses=0
 ```
 
 ### 版本信息
 
 ```
-VERSION: STM32-F103VET6-FreeRTOS v1.0.0
+VERSION: STM32-ENR v1.2.0 (May  3 2026 14:30:00)
 ```
 
 ## 项目结构
@@ -135,34 +199,43 @@ VERSION: STM32-F103VET6-FreeRTOS v1.0.0
 ```
 Core/
 ├── Inc/
-│   ├── main.h
-│   ├── FreeRTOS.h
-│   ├── cmsis_os.h
-│   ├── sensor_data.h      # 传感器数据结构
-│   ├── bme280.h           # BME280 驱动
-│   ├── lcd.h              # LCD 驱动
-│   ├── motor.h            # 电机驱动
-│   └── usart.h            # 串口驱动
+│   ├── main.h              # 主头文件
+│   ├── FreeRTOSConfig.h    # FreeRTOS 配置 (heap=15KB)
+│   ├── sensor_data.h       # 传感器数据结构
+│   ├── bme280.h            # BME280 驱动
+│   ├── lcd.h               # LCD 驱动
+│   ├── motor.h             # 电机驱动
+│   ├── filter.h            # 数字滤波器
+│   ├── watchdog.h          # 看门狗 + 任务监控
+│   ├── storage.h           # Flash 参数存储
+│   ├── version.h           # 编译版本信息
+│   ├── diagnostic.h        # 硬件自检框架
+│   └── usart.h             # 串口驱动
 └── Src/
-    ├── main.c
+    ├── main.c              # 主程序入口
     ├── freertos.c          # FreeRTOS 任务配置
-    ├── bme280.c
-    ├── lcd.c
-    ├── motor.c
+    ├── bme280.c            # BME280 驱动实现
+    ├── lcd.c               # LCD 驱动 (含完整字模)
+    ├── motor.c             # 电机驱动
+    ├── filter.c            # 滤波器实现
+    ├── watchdog.c          # 看门狗实现
+    ├── storage.c           # Flash 存储实现
+    ├── diagnostic.c        # 自检实现
     ├── usart.c             # UART DMA 空闲中断
     └── stm32f1xx_it.c      # 中断处理
 ```
 
 ## 编译
 
-使用 Keil MDK 或 STM32CubeIDE 打开项目，编译并烧录到目标板。
+使用 Keil MDK (v5) 打开 `MDK-ARM/stm32-enr.uvprojx`，编译并烧录到目标板。
+
 
 ## 注意事项
 
-1. HC05 蓝牙模块默认波特率为 115200
+1. HC05 蓝牙模块默认波特率 115200
 2. UART1 和 UART2 均使用 115200 波特率
 3. 电机/风扇使用 TIM2 的 CH1 和 CH2 通道
 4. BME280 使用 I2C1 接口 (PB6/PB7)
-5. 光敏和 PM2.5 使用 ADC1 通道 (请根据实际硬件配置)
-
-
+5. 光敏和 PM2.5 使用 ADC1 通道（根据实际硬件配置）
+6. 系统参数存储在 Flash 地址 `0x0807F800`，占用 1 页
+7. 首次上电自动初始化默认参数并写入 Flash

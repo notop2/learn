@@ -7,6 +7,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "filter.h"
 
 /* 传感器数据结构体 */
 typedef struct {
@@ -19,6 +20,9 @@ typedef struct {
     bool light_valid;     /* 光敏数据有效标志 */
     bool pm25_valid;      /* PM2.5 数据有效标志 */
     uint32_t timestamp;   /* 时间戳 */
+    float temp_filtered;  /* 滤波后的温度 */
+    float humid_filtered; /* 滤波后的湿度 */
+    float press_filtered; /* 滤波后的气压 */
 } SensorData_t;
 
 /* 命令类型 */
@@ -29,6 +33,7 @@ typedef enum {
     CMD_GET_STATUS,       /* 获取系统状态 */
     CMD_SET_FAN_MODE,     /* 设置风扇模式 (自动/手动) */
     CMD_GET_VERSION,      /* 获取固件版本 */
+    CMD_DIAGNOSTIC,       /* 系统自检诊断 */
     CMD_MAX
 } CommandType_t;
 

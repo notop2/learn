@@ -29,6 +29,11 @@
 #include "motor.h"
 #include "adc.h"
 #include "usart.h"
+#include "filter.h"
+#include "version.h"
+#include "diagnostic.h"
+#include "watchdog.h"
+#include "storage.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -64,6 +69,7 @@ osThreadId_t lcdTaskHandle;
 osThreadId_t uartTaskHandle;
 osThreadId_t cmdTaskHandle;
 osThreadId_t fanTaskHandle;
+osThreadId_t monitorTaskHandle;
 
 /* 任务属性 */
 const osThreadAttr_t sensorTask_attributes = {
@@ -96,6 +102,12 @@ const osThreadAttr_t fanTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
+const osThreadAttr_t monitorTask_attributes = {
+  .name = "monitorTask",
+  .stack_size = 256 * 2,
+  .priority = (osPriority_t) osPriorityIdle,
+};
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
@@ -106,6 +118,7 @@ void StartLcdTask(void *argument);
 void StartUartTask(void *argument);
 void StartCmdTask(void *argument);
 void StartFanTask(void *argument);
+void StartMonitorTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -118,6 +131,17 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
+
+  /* 初始化看门狗 */
+  WDT_Init();
+
+  /* 注册任务到看门狗监控 */
+  WDT_RegisterTask(TASK_ID_SENSOR, "sensor", 1500, true);
+  WDT_RegisterTask(TASK_ID_LCD, "lcd", 1500, false);
+  WDT_RegisterTask(TASK_ID_UART, "uart", 1500, false);
+  WDT_RegisterTask(TASK_ID_CMD, "cmd", 1500, true);
+  WDT_RegisterTask(TASK_ID_FAN, "fan", 1500, false);
+  WDT_RegisterTask(TASK_ID_MONITOR, "monitor", 10000, true);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -153,6 +177,9 @@ void MX_FREERTOS_Init(void) {
   /* creation of fanTask */
   fanTaskHandle = osThreadNew(StartFanTask, NULL, &fanTask_attributes);
 
+  /* creation of monitorTask */
+  monitorTaskHandle = osThreadNew(StartMonitorTask, NULL, &monitorTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -163,6 +190,36 @@ void MX_FREERTOS_Init(void) {
 
 }
 
+/* 私有变量 - 滤波器实例 */
+static MovingAvgFilter_t g_temp_filter;
+static MovingAvgFilter_t g_humid_filter;
+static MovingAvgFilter_t g_press_filter;
+
+/* 风扇状态机 */
+typedef enum {
+    FAN_IDLE = 0,
+    FAN_LOW,
+    FAN_MEDIUM,
+    FAN_HIGH,
+    FAN_MAX
+} FanState_t;
+
+static FanState_t g_fan_state = FAN_IDLE;
+static uint32_t g_state_entry_time = 0;
+static const uint32_t FAN_HYSTERESIS_MS = 10000;
+
+static int32_t fan_state_to_speed(FanState_t state)
+{
+    switch (state) {
+        case FAN_IDLE:   return 0;
+        case FAN_LOW:    return 25;
+        case FAN_MEDIUM: return 50;
+        case FAN_HIGH:   return 75;
+        case FAN_MAX:    return 100;
+    }
+    return 0;
+}
+
 /* 传感器任务：读取所有传感器数据 */
 void StartSensorTask(void *argument) {
   SensorData_t sensor_data;
@@ -170,12 +227,24 @@ void StartSensorTask(void *argument) {
   /* 初始化传感器 */
   BME280_Init();
   
+  /* 初始化滤波器 */
+  MovingAvg_Init(&g_temp_filter, 25.0f);
+  MovingAvg_Init(&g_humid_filter, 50.0f);
+  MovingAvg_Init(&g_press_filter, 1013.0f);
+  
   for (;;) {
     /* 读取 BME280 */
     if (BME280_ReadData(&sensor_data.temperature, &sensor_data.humidity, &sensor_data.pressure) == HAL_OK) {
       sensor_data.bme280_valid = true;
+      /* 应用移动平均滤波 */
+      sensor_data.temp_filtered = MovingAvg_Update(&g_temp_filter, sensor_data.temperature);
+      sensor_data.humid_filtered = MovingAvg_Update(&g_humid_filter, sensor_data.humidity);
+      sensor_data.press_filtered = MovingAvg_Update(&g_press_filter, sensor_data.pressure);
     } else {
       sensor_data.bme280_valid = false;
+      sensor_data.temp_filtered = sensor_data.temperature;
+      sensor_data.humid_filtered = sensor_data.humidity;
+      sensor_data.press_filtered = sensor_data.pressure;
     }
     
     /* 读取 ADC (光敏和 PM2.5) */
@@ -186,19 +255,24 @@ void StartSensorTask(void *argument) {
     } else {
       sensor_data.light_valid = false;
     }
+    HAL_ADC_Stop(&hadc1);
     
+    HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
       sensor_data.pm25 = HAL_ADC_GetValue(&hadc1);
       sensor_data.pm25_valid = true;
     } else {
       sensor_data.pm25_valid = false;
     }
+    HAL_ADC_Stop(&hadc1);
     
     /* 添加时间戳 */
     sensor_data.timestamp = osKernelGetTickCount();
     
     /* 发送数据到队列 */
     osMessageQueuePut(dataQueueHandle, &sensor_data, 0, 0);
+    
+    WDT_TaskAlive(TASK_ID_SENSOR);
     
     osDelay(500); /* 500ms 采样一次 */
   }
@@ -221,7 +295,7 @@ void StartLcdTask(void *argument) {
       /* 显示温度 */
       LCD_ShowString(10, 40, "Temp:", COLOR_WHITE, COLOR_BLACK, 16);
       if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 40, sensor_data.temperature, 2, COLOR_GREEN, COLOR_BLACK, 16);
+        LCD_ShowFloat(80, 40, sensor_data.temp_filtered, 2, COLOR_GREEN, COLOR_BLACK, 16);
         LCD_ShowString(180, 40, "C", COLOR_WHITE, COLOR_BLACK, 16);
       } else {
         LCD_ShowString(80, 40, "---", COLOR_RED, COLOR_BLACK, 16);
@@ -230,7 +304,7 @@ void StartLcdTask(void *argument) {
       /* 显示湿度 */
       LCD_ShowString(10, 60, "Humid:", COLOR_WHITE, COLOR_BLACK, 16);
       if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 60, sensor_data.humidity, 1, COLOR_GREEN, COLOR_BLACK, 16);
+        LCD_ShowFloat(80, 60, sensor_data.humid_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
         LCD_ShowString(140, 60, "%", COLOR_WHITE, COLOR_BLACK, 16);
       } else {
         LCD_ShowString(80, 60, "---", COLOR_RED, COLOR_BLACK, 16);
@@ -239,7 +313,7 @@ void StartLcdTask(void *argument) {
       /* 显示气压 */
       LCD_ShowString(10, 80, "Press:", COLOR_WHITE, COLOR_BLACK, 16);
       if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 80, sensor_data.pressure, 1, COLOR_GREEN, COLOR_BLACK, 16);
+        LCD_ShowFloat(80, 80, sensor_data.press_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
         LCD_ShowString(180, 80, "hPa", COLOR_WHITE, COLOR_BLACK, 16);
       } else {
         LCD_ShowString(80, 80, "---", COLOR_RED, COLOR_BLACK, 16);
@@ -261,6 +335,7 @@ void StartLcdTask(void *argument) {
         LCD_ShowString(80, 120, "---", COLOR_RED, COLOR_BLACK, 16);
       }
     }
+    WDT_TaskAlive(TASK_ID_LCD);
   }
 }
 
@@ -287,51 +362,82 @@ void StartUartTask(void *argument) {
       /* 通过 UART1 发送 (调试) */
       HAL_UART_Transmit(&huart1, (uint8_t *)buffer, len, 100);
     }
+    WDT_TaskAlive(TASK_ID_UART);
   }
 }
 
-/* 风扇控制任务 - 温度过高自动触发风扇 */
+/* 风扇控制任务 - 温度过高自动触发风扇 (带迟滞状态机) */
 void StartFanTask(void *argument) {
   SensorData_t sensor_data;
-  int32_t fan_speed = 0;
+  FanState_t next_state;
   
   for (;;) {
     /* 从队列接收传感器数据 */
     if (osMessageQueueGet(dataQueueHandle, &sensor_data, NULL, 100) == osOK) {
       /* 只有在自动模式下才执行温度控制 */
       if (GetFanMode() == 0) {
-        /* 温度阈值控制风扇 */
+        /* 温度阈值控制 - 带迟滞的状态机 */
         if (sensor_data.bme280_valid) {
-          if (sensor_data.temperature > 35.0f) {
-            fan_speed = 100;  /* 温度 > 35°C, 全速 */
-          } else if (sensor_data.temperature > 30.0f) {
-            fan_speed = 50;   /* 温度 30-35°C, 半速 */
-          } else if (sensor_data.temperature > 25.0f) {
-            fan_speed = 25;   /* 温度 25-30°C, 低速 */
-          } else {
-            fan_speed = 0;    /* 温度 < 25°C, 关闭 */
+          float temp = sensor_data.temp_filtered;
+          uint32_t now = osKernelGetTickCount();
+          uint32_t elapsed = now - g_state_entry_time;
+          
+          next_state = g_fan_state;
+          
+          switch (g_fan_state) {
+            case FAN_IDLE:
+              if (temp > 28.0f)  next_state = FAN_LOW;
+              break;
+            case FAN_LOW:
+              if (temp > 32.0f)        next_state = FAN_MEDIUM;
+              else if (temp < 26.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_IDLE;
+              break;
+            case FAN_MEDIUM:
+              if (temp > 36.0f)        next_state = FAN_HIGH;
+              else if (temp < 30.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_LOW;
+              break;
+            case FAN_HIGH:
+              if (temp > 40.0f)        next_state = FAN_MAX;
+              else if (temp < 34.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_MEDIUM;
+              break;
+            case FAN_MAX:
+              if (temp < 38.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_HIGH;
+              break;
           }
           
-          /* 设置风扇速度 (电机A连接风扇) */
-          Motor_SetSpeedA(fan_speed);
-          SetManualFanSpeed(fan_speed);
+          if (next_state != g_fan_state) {
+            g_fan_state = next_state;
+            g_state_entry_time = now;
+          }
+          
+          int32_t speed = fan_state_to_speed(g_fan_state);
+          Motor_SetSpeedA(speed);
+          SetManualFanSpeed(speed);
         }
       }
     }
+    WDT_TaskAlive(TASK_ID_FAN);
   }
 }
 
 /* 命令处理任务 */
 void StartCmdTask(void *argument) {
   Command_t cmd;
-  char response[128];
+  char response[256];
   uint16_t len;
+  SystemParams_t sys_params;
+  DiagReport_t diag_report;
   
   /* 初始化电机 */
   Motor_Init();
   
   /* 初始化 UART2 DMA 空闲中断接收 */
   UART2_DMA_Init();
+  
+  /* 加载持久化参数 */
+  if (STORAGE_Load(&sys_params)) {
+    SetFanMode(sys_params.fan_mode);
+  }
   
   for (;;) {
     /* 等待命令 */
@@ -340,38 +446,64 @@ void StartCmdTask(void *argument) {
         case CMD_SET_MOTOR:
           Motor_SetSpeedA(cmd.data.motor.speed);
           Motor_SetSpeedB(cmd.data.motor.speed);
+          sys_params.fan_speed = cmd.data.motor.speed;
           break;
           
         case CMD_SET_FAN_MODE:
           SetFanMode(cmd.data.fan.mode);
+          sys_params.fan_mode = cmd.data.fan.mode;
           if (cmd.data.fan.mode == 1) {
             Motor_SetSpeedA(0);
           }
+          STORAGE_Save(&sys_params);
           break;
           
         case CMD_GET_VERSION:
-          len = sprintf(response, "VERSION: STM32-F103VET6-FreeRTOS v1.0.0\r\n");
+          len = sprintf(response, "VERSION: %s\r\n", FW_STRING);
           HAL_UART_Transmit(&huart2, (uint8_t *)response, len, 100);
           HAL_UART_Transmit(&huart1, (uint8_t *)response, len, 100);
           break;
           
-        case CMD_GET_STATUS:
+        case CMD_GET_STATUS: {
           len = sprintf(response, "STATUS: fan_mode=%d fan_speed=%d uptime=%lu\r\n",
             GetFanMode(), GetManualFanSpeed(), osKernelGetTickCount());
           HAL_UART_Transmit(&huart2, (uint8_t *)response, len, 100);
           HAL_UART_Transmit(&huart1, (uint8_t *)response, len, 100);
+
+          WDT_PrintStatus(response, sizeof(response));
+          HAL_UART_Transmit(&huart2, (uint8_t *)response, strlen(response), 100);
           break;
-          
-        case CMD_GET_DATA:
+        }
+        case CMD_GET_DATA: {
           len = sprintf(response, "DATA: use dataQueue to get sensor data\r\n");
           HAL_UART_Transmit(&huart2, (uint8_t *)response, len, 100);
           HAL_UART_Transmit(&huart1, (uint8_t *)response, len, 100);
           break;
-          
+        }
+        case CMD_DIAGNOSTIC: {
+          DIAG_RunAll(&diag_report);
+          DIAG_PrintReport(&diag_report, response, sizeof(response));
+          HAL_UART_Transmit(&huart2, (uint8_t *)response, strlen(response), 100);
+          HAL_UART_Transmit(&huart1, (uint8_t *)response, strlen(response), 100);
+          break;
+        }
         default:
           break;
       }
     }
+    WDT_TaskAlive(TASK_ID_CMD);
+  }
+}
+
+/* 系统监控任务：喂狗 + 检查任务健康 + 系统信息 */
+void StartMonitorTask(void *argument) {
+  char status_buf[256];
+
+  for (;;) {
+    WDT_Feed();
+    WDT_CheckAllTasks();
+    WDT_TaskAlive(TASK_ID_MONITOR);
+    osDelay(2000);
   }
 }
 

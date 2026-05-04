@@ -304,6 +304,14 @@ static void ParseCommand(uint8_t *data, uint16_t len) {
     return;
   }
   
+  /* 解析 GET /diag */
+  if (strncmp((char *)data, "GET /diag", 9) == 0) {
+    cmd.type = CMD_DIAGNOSTIC;
+    osMessageQueuePut(cmdQueueHandle, &cmd, 0, 0);
+    SendResponse("OK: GET /diag queued\r\n");
+    return;
+  }
+  
   /* 解析 SET /motor?speed=X */
   if (strncmp((char *)data, "SET /motor", 10) == 0) {
     char *speed_str = strstr((char *)data, "speed=");

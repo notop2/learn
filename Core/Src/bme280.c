@@ -63,9 +63,11 @@ HAL_StatusTypeDef BME280_ReadData(float *temp, float *hum, float *press) {
     adc_H = (data[6] << 8) | data[7];
     
     /* 补偿温度 */
-    var1 = ((((adc_T >> 3) - ((int32_t)calib_data.dig_T1 << 1)) * ((int32_t)calib_data.dig_T2) >> 11;
-    var2 = (((((adc_T >> 4) - ((int32_t)calib_data.dig_T1)) * ((adc_T >> 4) - ((int32_t)calib_data.dig_T1))) >> 12);
-    var2 = (var2 * ((int32_t)calib_data.dig_T3) >> 14;
+    var1 = (adc_T >> 3) - ((int32_t)calib_data.dig_T1 << 1);
+    var1 = (var1 * (int32_t)calib_data.dig_T2) >> 11;
+    var2 = (adc_T >> 4) - (int32_t)calib_data.dig_T1;
+    var2 = (var2 * var2) >> 12;
+    var2 = (var2 * (int32_t)calib_data.dig_T3) >> 14;
     calib_data.t_fine = var1 + var2;
     t = (calib_data.t_fine * 5 + 128) >> 8;
     
@@ -74,23 +76,25 @@ HAL_StatusTypeDef BME280_ReadData(float *temp, float *hum, float *press) {
     var2_64 = var1_64 * var1_64 * (int64_t)calib_data.dig_P6;
     var2_64 = var2_64 + ((var1_64 * (int64_t)calib_data.dig_P5) << 17);
     var2_64 = var2_64 + (((int64_t)calib_data.dig_P4) << 35);
-    var1_64 = ((var1_64 * var1_64 * (int64_t)calib_data.dig_P3) >> 8) + ((var1_64 * (int64_t)calib_data.dig_P2) << 12;
+    var1_64 = ((var1_64 * var1_64 * (int64_t)calib_data.dig_P3) >> 8) + ((var1_64 * (int64_t)calib_data.dig_P2) << 12);
     var1_64 = (((((int64_t)1) << 47) + var1_64)) * ((int64_t)calib_data.dig_P1) >> 33;
     if (var1_64 == 0) {
         p = 0;
     } else {
-        p_64 = ((int64_t)1048576 - adc_P;
-        p_64 = (((p_64 << 31) - var2_64) * 3125 / var1_64;
+        p_64 = (int64_t)1048576 - adc_P;
+        p_64 = (((p_64 << 31) - var2_64) * 3125) / var1_64;
         var1_64 = (((int64_t)calib_data.dig_P9) * (p_64 >> 13) * (p_64 >> 13)) >> 25;
         var2_64 = (((int64_t)calib_data.dig_P8) * p_64) >> 19;
-        p_64 = ((p_64 + var1_64 + var2_64) >> 8) + (((int64_t)calib_data.dig_P7) << 4;
+        p_64 = ((p_64 + var1_64 + var2_64) >> 8) + (((int64_t)calib_data.dig_P7) << 4);
         p = (int32_t)(p_64);
     }
     
     /* 补偿湿度 */
-    h = (calib_data.t_fine - ((int32_t)76800));
-    h = ((((adc_H << 14) - (((int32_t)calib_data.dig_H4) << 20) - (((int32_t)calib_data.dig_H5 * h) + ((int32_t)16384) >> 15;
-    h = (((((h << 15) + 12288)) * ((int32_t)calib_data.dig_H2 + 32768) >> 18;
+    h = (calib_data.t_fine - (int32_t)76800);
+    h = (adc_H << 14) - (((int32_t)calib_data.dig_H4) << 20) - (((int32_t)calib_data.dig_H5 * h) + (int32_t)16384);
+    h = (h >> 15);
+    h = (((h << 15) + 12288)) * (((int32_t)calib_data.dig_H2) + 32768);
+    h = (h >> 18);
     h = h - ((((h >> 15) * (h >> 15)) >> 7) * ((int32_t)calib_data.dig_H6)) >> 4;
     h = (h < 0 ? 0 : h);
     h = h > 419430400 ? 419430400 : h;
@@ -153,7 +157,7 @@ static HAL_StatusTypeDef BME280_ReadCalibData(void) {
     calib_data.dig_H2 = (int16_t)((data[1] << 8) | data[0]);
     calib_data.dig_H3 = data[2];
     calib_data.dig_H4 = (int16_t)((data[3] << 4) | (data[4] & 0x0F));
-    calib_data.dig_H5 = (int16_t)((data[5] << 4) | ((data[4] >> 4));
+    calib_data.dig_H5 = (int16_t)((data[5] << 4) | (data[4] >> 4));
     calib_data.dig_H6 = (int8_t)data[6];
     
     return HAL_OK;
