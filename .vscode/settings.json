@@ -1,11 +1,11 @@
 {
-    "C_Cpp.default.compilerPath": "C:/Users/26326/AppData/Local/Keil_v5/ARM/ARMCC/bin/armcc.exe",
+    "C_Cpp.default.compilerPath": "C:/Keil_v5/ARM/ARMCC/bin/armcc.exe",
     "C_Cpp.default.intelliSenseMode": "msvc-x64",
     "C_Cpp.default.compilerArgs": [
         "--cpu=Cortex-M3"
     ],
     "C_Cpp.default.includePath": [
-        "C:/Users/26326/AppData/Local/Keil_v5/ARM/ARMCC/include",
+        "C:/Keil_v5/ARM/ARMCC/include",
         "${workspaceFolder}/Core/Inc",
         "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc",
         "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
@@ -30,5 +30,10 @@
         "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/include",
         "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2",
         "${workspaceFolder}/Drivers/CMSIS/Include"
-    ]
+    ],
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.c": "c",
+        "*.h": "c"
+    }
 }

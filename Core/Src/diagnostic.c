@@ -3,6 +3,8 @@
 #include "bme280.h"
 #include "lcd.h"
 #include "motor.h"
+#include "adc.h"
+#include "usart.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>

@@ -1,7 +1,7 @@
 stm32-enr\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/croutine.c
 stm32-enr\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-stm32-enr\croutine.o: C:\Users\26326\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-stm32-enr\croutine.o: C:\Users\26326\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+stm32-enr\croutine.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+stm32-enr\croutine.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 stm32-enr\croutine.o: ../Core/Inc/FreeRTOSConfig.h
 stm32-enr\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 stm32-enr\croutine.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

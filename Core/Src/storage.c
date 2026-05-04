@@ -4,9 +4,6 @@
 
 #define FLASH_PARAM_ADDR    0x0807F800
 
-static bool g_loaded = false;
-static SystemParams_t g_params;
-
 uint16_t STORAGE_CalcCRC(const uint8_t *data, uint32_t len)
 {
     uint16_t crc = 0xFFFF;
@@ -58,7 +55,6 @@ bool STORAGE_Load(SystemParams_t *params)
     }
 
     params->crc = saved_crc;
-    g_loaded = true;
     return true;
 }
 
@@ -93,6 +89,5 @@ bool STORAGE_Save(const SystemParams_t *params)
     }
 
     HAL_FLASH_Lock();
-    g_loaded = true;
     return true;
 }

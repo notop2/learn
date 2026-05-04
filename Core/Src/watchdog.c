@@ -3,18 +3,20 @@
 #include <string.h>
 #include <stdio.h>
 
-static IWDG_HandleTypeDef hiwdg;
+#define IWDG_KEY_RELOAD   0xAAAA
+#define IWDG_KEY_ENABLE   0xCCCC
+#define IWDG_KEY_UNLOCK   0x5555
+
 static TaskWatchdog_t g_task_wd[TASK_ID_COUNT];
 static bool g_initialized = false;
 
 void WDT_Init(void)
 {
-    hiwdg.Instance = IWDG;
-    hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
-    hiwdg.Init.Reload = 4095;
-    if (HAL_IWDG_Init(&hiwdg) != HAL_OK) {
-        Error_Handler();
-    }
+    IWDG->KR = IWDG_KEY_UNLOCK;
+    IWDG->PR = 5;
+    IWDG->RLR = 1249;
+    IWDG->KR = IWDG_KEY_ENABLE;
+    IWDG->KR = IWDG_KEY_RELOAD;
 
     memset(g_task_wd, 0, sizeof(g_task_wd));
     g_initialized = true;
@@ -22,7 +24,7 @@ void WDT_Init(void)
 
 void WDT_Feed(void)
 {
-    HAL_IWDG_Refresh(&hiwdg);
+    IWDG->KR = IWDG_KEY_RELOAD;
 }
 
 void WDT_RegisterTask(TaskId_t id, const char *name, uint32_t timeout_ms, bool critical)
@@ -83,7 +85,7 @@ void WDT_PrintStatus(char *buf, uint16_t size)
     for (int i = 0; i < TASK_ID_COUNT; i++) {
         if (g_task_wd[i].name == NULL) continue;
         uint32_t elapsed = now - g_task_wd[i].last_alive_tick;
-        pos += snprintf(buf + pos, size - pos, "[%s] %s alive=%lu misses=%lu\r\n",
+        pos += snprintf(buf + pos, size - pos, "[%s]%s alive=%lu miss=%lu\r\n",
             (elapsed < g_task_wd[i].max_expected_ms) ? "OK" : "WARN",
             g_task_wd[i].name,
             (unsigned long)elapsed,

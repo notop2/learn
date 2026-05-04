@@ -34,6 +34,8 @@
 #include "diagnostic.h"
 #include "watchdog.h"
 #include "storage.h"
+#include <stdio.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -281,7 +283,6 @@ void StartSensorTask(void *argument) {
 /* LCD 显示任务 */
 void StartLcdTask(void *argument) {
   SensorData_t sensor_data;
-  char buffer[64];
   
   LCD_Init();
   LCD_Clear(COLOR_BLACK);
@@ -497,7 +498,6 @@ void StartCmdTask(void *argument) {
 
 /* 系统监控任务：喂狗 + 检查任务健康 + 系统信息 */
 void StartMonitorTask(void *argument) {
-  char status_buf[256];
 
   for (;;) {
     WDT_Feed();

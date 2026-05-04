@@ -562,9 +562,9 @@ dlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 -I../Middlewares/Third_Party
 /FreeRTOS/Source/portable/RVDS/ARM_CM3 -I../Drivers/CMSIS/Device/ST/STM32F1xx/I
 nclude -I../Drivers/CMSIS/Include -I.\RTE\_stm32-enr -IC:\Users\26326\AppData\L
 ocal\Arm\Packs\ARM\CMSIS\6.2.0\CMSIS\Core\Include -IC:\Users\26326\AppData\Loca
-l\Arm\Packs\Keil\STM32F1xx_DFP\2.3.0\Device\Include --predefine="__EVAL SETA 1"
- --predefine="__UVISION_VERSION SETA 543" --predefine="STM32F10X_HD SETA 1" --p
-redefine="_RTE_ SETA 1" --list=startup_stm32f103xe.lst startup_stm32f103xe.s
+l\Arm\Packs\Keil\STM32F1xx_DFP\2.3.0\Device\Include --predefine="__UVISION_VERS
+ION SETA 536" --predefine="_RTE_ SETA 1" --predefine="STM32F10X_HD SETA 1" --pr
+edefine="_RTE_ SETA 1" --list=startup_stm32f103xe.lst startup_stm32f103xe.s
 
 
 
@@ -1461,4 +1461,4 @@ Symbol: __use_two_region_memory
       None
 Comment: __use_two_region_memory unused
 3 symbols
-427 symbols in table
+426 symbols in table

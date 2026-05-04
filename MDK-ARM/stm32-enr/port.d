@@ -1,7 +1,7 @@
 stm32-enr\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM3/port.c
 stm32-enr\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
-stm32-enr\port.o: C:\Users\26326\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-stm32-enr\port.o: C:\Users\26326\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+stm32-enr\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+stm32-enr\port.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 stm32-enr\port.o: ../Core/Inc/FreeRTOSConfig.h
 stm32-enr\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
 stm32-enr\port.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h

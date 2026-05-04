@@ -21,6 +21,9 @@
 #include "usart.h"
 #include "cmsis_os.h"
 #include "sensor_data.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* USER CODE BEGIN 0 */
 #define UART2_RX_BUFFER_SIZE  128
