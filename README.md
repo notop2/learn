@@ -19,6 +19,41 @@
 | PM2.5 传感器 | ADC1 | 颗粒物浓度采集 |
 | TB6612 电机驱动 | TIM2 PWM | 直流电机/风扇控制 |
 
+## GPIO 引脚分配
+
+| 功能 | 引脚 | 复用/模式 | 说明 |
+|------|------|----------|------|
+| **I2C1_SCL** | PB6 | AF_OD | BME280 时钟 |
+| **I2C1_SDA** | PB7 | AF_OD | BME280 数据 |
+| **USART1_TX** | PA9 | AF_PP | 调试串口发送 |
+| **USART1_RX** | PA10 | AF_PP | 调试串口接收 |
+| **USART2_TX** | PA2 | AF_PP | HC05 蓝牙发送 |
+| **USART2_RX** | PA3 | AF_PP | HC05 蓝牙接收 |
+| **ADC1_IN10** | PC0 | Analog | 光敏电阻 |
+| **ADC1_IN12** | PC2 | Analog | PM2.5 传感器 |
+| **TIM2_CH3** | PB10 | AF_PP | 电机 PWM (部分重映射) |
+| **AIN1** | PA0 | Output | 电机A方向1 |
+| **AIN2** | PA1 | Output | 电机A方向2 |
+| **BIN1** | PA2 | Output | 电机B方向1 |
+| **BIN2** | PA3 | Output | 电机B方向2 |
+| **STBY** | PA4 | Output | 电机待机 |
+
+### FSMC (LCD)
+
+| 引脚 | 功能 | 引脚 | 功能 |
+|------|------|------|------|
+| PD0 | FSMC_D2 | PE7 | FSMC_D4 |
+| PD1 | FSMC_D3 | PE8 | FSMC_D5 |
+| PD4 | FSMC_NOE | PE9 | FSMC_D6 |
+| PD5 | FSMC_NWE | PE10 | FSMC_D7 |
+| PD7 | FSMC_NE1 | PE11 | FSMC_D8 |
+| PD8 | FSMC_D13 | PE12 | FSMC_D9 |
+| PD9 | FSMC_D14 | PE13 | FSMC_D10 |
+| PD10 | FSMC_D15 | PE14 | FSMC_D11 |
+| PD11 | FSMC_A16 | PE15 | FSMC_D12 |
+| PD14 | FSMC_D0 |  |  |
+| PD15 | FSMC_D1 |  |  |
+
 ## 系统架构
 
 ```
@@ -45,7 +80,7 @@
 │                  ┌─────────┴─────────┐                    │
 │                  ▼                   ▼                    │
 │           ┌──────────────┐  ┌────────────────┐            │
-│           │   UART TX    │  │  Command Parse  │           │
+│           │   UART TX    │  │  Command Parse  │            │
 │           └──────────────┘  └────────────────┘            │
 │                                                           │
 │  ┌──────────────┐                                         │
@@ -62,6 +97,8 @@ UART1 (有线)      HC05 (蓝牙)
     ▼                   ▼
 Linux/PC          Linux/PC/Android
 ```
+
+详细见[系统架构图](系统架构图.png)
 
 ## 任务列表
 
