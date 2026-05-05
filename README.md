@@ -34,9 +34,9 @@
 | **TIM2_CH3** | PB10 | AF_PP | 电机 PWM (部分重映射) |
 | **AIN1** | PA0 | Output | 电机A方向1 |
 | **AIN2** | PA1 | Output | 电机A方向2 |
-| **BIN1** | PA2 | Output | 电机B方向1 |
-| **BIN2** | PA3 | Output | 电机B方向2 |
-| **STBY** | PA4 | Output | 电机待机 |
+| **BIN1** | PB0 | Output | 电机B方向1 |
+| **BIN2** | PB1 | Output | 电机B方向2 |
+| **STBY** | PA5 | Output | 电机待机 |
 
 ### FSMC (LCD)
 
@@ -275,4 +275,5 @@ Core/
 4. BME280 使用 I2C1 接口 (PB6/PB7)
 5. 光敏和 PM2.5 使用 ADC1 通道（根据实际硬件配置）
 6. 系统参数存储在 Flash 地址 `0x0807F800`，占用 1 页
-7. 首次上电自动初始化默认参数并写入 Flash
+7. 首次上电自动初始化默认参数并写入Flash
+8. **野火指南者兼容**: STBY引脚使用PA5，避免与SPI1_NSS(PA4)冲突

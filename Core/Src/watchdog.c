@@ -1,5 +1,6 @@
 #include "watchdog.h"
 #include "main.h"
+#include "cmsis_os.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -34,21 +35,21 @@ void WDT_RegisterTask(TaskId_t id, const char *name, uint32_t timeout_ms, bool c
     g_task_wd[id].name = name;
     g_task_wd[id].max_expected_ms = timeout_ms;
     g_task_wd[id].is_critical = critical;
-    g_task_wd[id].last_alive_tick = HAL_GetTick();
+    g_task_wd[id].last_alive_tick = osKernelGetTickCount();
     g_task_wd[id].deadline_misses = 0;
 }
 
 void WDT_TaskAlive(TaskId_t id)
 {
     if (id >= TASK_ID_COUNT) return;
-    g_task_wd[id].last_alive_tick = HAL_GetTick();
+    g_task_wd[id].last_alive_tick = osKernelGetTickCount();
 }
 
 void WDT_CheckAllTasks(void)
 {
     if (!g_initialized) return;
 
-    uint32_t now = HAL_GetTick();
+    uint32_t now = osKernelGetTickCount();
 
     for (int i = 0; i < TASK_ID_COUNT; i++) {
         if (g_task_wd[i].name == NULL) continue;
@@ -74,13 +75,13 @@ uint32_t WDT_GetTaskMisses(TaskId_t id)
 bool WDT_IsTaskHealthy(TaskId_t id)
 {
     if (id >= TASK_ID_COUNT) return false;
-    return (HAL_GetTick() - g_task_wd[id].last_alive_tick) < g_task_wd[id].max_expected_ms;
+    return (osKernelGetTickCount() - g_task_wd[id].last_alive_tick) < g_task_wd[id].max_expected_ms;
 }
 
 void WDT_PrintStatus(char *buf, uint16_t size)
 {
     uint16_t pos = 0;
-    uint32_t now = HAL_GetTick();
+    uint32_t now = osKernelGetTickCount();
 
     for (int i = 0; i < TASK_ID_COUNT; i++) {
         if (g_task_wd[i].name == NULL) continue;

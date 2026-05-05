@@ -31,7 +31,10 @@ void STORAGE_SetDefaults(SystemParams_t *params)
     params->humid_offset = 0.0f;
     params->light_threshold = 1000;
     params->save_count = 0;
-    params->crc = STORAGE_CalcCRC((uint8_t *)params, sizeof(SystemParams_t) - 2);
+    
+    uint8_t *p = (uint8_t *)params;
+    params->crc = 0;
+    params->crc = STORAGE_CalcCRC(p, sizeof(SystemParams_t));
 }
 
 bool STORAGE_Load(SystemParams_t *params)
@@ -78,7 +81,8 @@ bool STORAGE_Save(const SystemParams_t *params)
 
     SystemParams_t temp = *params;
     temp.save_count++;
-    temp.crc = STORAGE_CalcCRC((uint8_t *)&temp, sizeof(SystemParams_t) - 2);
+    temp.crc = 0;
+    temp.crc = STORAGE_CalcCRC((uint8_t *)&temp, sizeof(SystemParams_t));
 
     uint32_t *data = (uint32_t *)&temp;
     for (uint32_t i = 0; i < sizeof(SystemParams_t) / 4; i++) {

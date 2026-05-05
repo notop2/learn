@@ -277,7 +277,9 @@ static void SendResponse(const char *response) {
 /* 解析并处理命令 */
 static void ParseCommand(uint8_t *data, uint16_t len) {
   /* 确保字符串以 null 结尾 */
-  if (len >= UART2_RX_BUFFER_SIZE) len = UART2_RX_BUFFER_SIZE - 1;
+  if (len >= UART2_RX_BUFFER_SIZE) {
+    len = UART2_RX_BUFFER_SIZE - 1;
+  }
   data[len] = '\0';
   
   Command_t cmd;

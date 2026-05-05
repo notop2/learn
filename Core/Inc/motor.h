@@ -11,16 +11,16 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-/* 电机控制引脚定义 (需要根据实际硬件修改) */
+/* 电机控制引脚定义 (BIN1/BIN2 使用 PB0/PB1 避免与 USART2 冲突) */
 #define AIN1_Pin      GPIO_PIN_0
 #define AIN1_GPIO_Port GPIOA
 #define AIN2_Pin      GPIO_PIN_1
 #define AIN2_GPIO_Port GPIOA
-#define BIN1_Pin      GPIO_PIN_2
-#define BIN1_GPIO_Port GPIOA
-#define BIN2_Pin      GPIO_PIN_3
-#define BIN2_GPIO_Port GPIOA
-#define STBY_Pin      GPIO_PIN_4
+#define BIN1_Pin      GPIO_PIN_0
+#define BIN1_GPIO_Port GPIOB
+#define BIN2_Pin      GPIO_PIN_1
+#define BIN2_GPIO_Port GPIOB
+#define STBY_Pin      GPIO_PIN_5
 #define STBY_GPIO_Port GPIOA
 
 /* 电机方向 */

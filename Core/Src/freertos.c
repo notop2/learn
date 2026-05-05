@@ -250,6 +250,7 @@ void StartSensorTask(void *argument) {
     }
     
     /* 读取 ADC (光敏和 PM2.5) */
+    ADC_SelectChannel(ADC_CHANNEL_10);
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
       sensor_data.light = HAL_ADC_GetValue(&hadc1);
@@ -259,6 +260,7 @@ void StartSensorTask(void *argument) {
     }
     HAL_ADC_Stop(&hadc1);
     
+    ADC_SelectChannel(ADC_CHANNEL_12);
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
       sensor_data.pm25 = HAL_ADC_GetValue(&hadc1);
@@ -272,7 +274,7 @@ void StartSensorTask(void *argument) {
     sensor_data.timestamp = osKernelGetTickCount();
     
     /* 发送数据到队列 */
-    osMessageQueuePut(dataQueueHandle, &sensor_data, 0, 0);
+    osMessageQueuePut(dataQueueHandle, &sensor_data, 0, 10);
     
     WDT_TaskAlive(TASK_ID_SENSOR);
     
@@ -371,6 +373,8 @@ void StartUartTask(void *argument) {
 void StartFanTask(void *argument) {
   SensorData_t sensor_data;
   FanState_t next_state;
+  
+  g_state_entry_time = osKernelGetTickCount();
   
   for (;;) {
     /* 从队列接收传感器数据 */
