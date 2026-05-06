@@ -140,7 +140,7 @@ static void LCD_SetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
 
 /* LCD 初始化 */
 void LCD_Init(void) {
-    /* 简单的初始化序列 (假设是 ILI9341) */
+    /* 简单的初始化序列  */
     HAL_Delay(50);
     
     LCD_WriteCmd(0xCB);

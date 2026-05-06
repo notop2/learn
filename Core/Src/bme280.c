@@ -138,6 +138,7 @@ static HAL_StatusTypeDef BME280_ReadCalibData(void) {
     calib_data.dig_T1 = (uint16_t)((data[1] << 8) | data[0]);
     calib_data.dig_T2 = (int16_t)((data[3] << 8) | data[2]);
     calib_data.dig_T3 = (int16_t)((data[5] << 8) | data[4]);
+
     calib_data.dig_P1 = (uint16_t)((data[7] << 8) | data[6]);
     calib_data.dig_P2 = (int16_t)((data[9] << 8) | data[8]);
     calib_data.dig_P3 = (int16_t)((data[11] << 8) | data[10]);
@@ -147,6 +148,7 @@ static HAL_StatusTypeDef BME280_ReadCalibData(void) {
     calib_data.dig_P7 = (int16_t)((data[19] << 8) | data[18]);
     calib_data.dig_P8 = (int16_t)((data[21] << 8) | data[20]);
     calib_data.dig_P9 = (int16_t)((data[23] << 8) | data[22]);
+    
     calib_data.dig_H1 = data[25];
     
     /* 读取第二部分校准数据 */

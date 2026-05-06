@@ -59,10 +59,12 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
+/* 全局共享传感器数据 - 发布订阅模式 */
+static volatile SensorData_t g_sensor_data;
+static osEventFlagsId_t sensorEventFlags;
+#define FLAG_NEW_DATA  0x0001U
 /* USER CODE END Variables */
 /* 消息队列定义 */
-osMessageQueueId_t dataQueueHandle;
 osMessageQueueId_t cmdQueueHandle;
 
 /* 任务定义 */
@@ -159,7 +161,6 @@ void MX_FREERTOS_Init(void) {
 
   /* 初始化消息队列 */
   /* USER CODE BEGIN RTOS_QUEUES */
-  dataQueueHandle = osMessageQueueNew(10, sizeof(SensorData_t), NULL);
   cmdQueueHandle = osMessageQueueNew(5, sizeof(Command_t), NULL);
   /* USER CODE END RTOS_QUEUES */
 
@@ -187,7 +188,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
+  sensorEventFlags = osEventFlagsNew(NULL);
   /* USER CODE END RTOS_EVENTS */
 
 }
@@ -196,6 +197,39 @@ void MX_FREERTOS_Init(void) {
 static MovingAvgFilter_t g_temp_filter;
 static MovingAvgFilter_t g_humid_filter;
 static MovingAvgFilter_t g_press_filter;
+static MovingAvgFilter_t g_light_filter;
+static MovingAvgFilter_t g_pm25_filter;
+
+#define ADC_RESOLUTION     4095
+#define ADC_VREF           3.3f
+
+static inline float ADC_ToVoltage(uint16_t adc_value)
+{
+    return (float)adc_value * ADC_VREF / ADC_RESOLUTION;
+}
+
+#define LIGHT_MAX_LUX      1000.0f
+#define LIGHT_VOLTAGE_MAX  3.3f
+
+static inline float ADC_ToLux(float voltage)
+{
+    if (voltage <= 0.001f) return 0.0f;
+    if (voltage >= LIGHT_VOLTAGE_MAX) return LIGHT_MAX_LUX;
+    float ratio = voltage / LIGHT_VOLTAGE_MAX;
+    return ratio * LIGHT_MAX_LUX;
+}
+
+#define PM25_VOLTAGE_CLEAN  0.6f
+#define PM25_MAX_UGM3      500.0f
+#define PM25_VOLTAGE_MAX   2.8f
+
+static inline float ADC_ToPM25(float voltage)
+{
+    if (voltage <= PM25_VOLTAGE_CLEAN) return 0.0f;
+    if (voltage >= PM25_VOLTAGE_MAX) return PM25_MAX_UGM3;
+    float ratio = (voltage - PM25_VOLTAGE_CLEAN) / (PM25_VOLTAGE_MAX - PM25_VOLTAGE_CLEAN);
+    return ratio * PM25_MAX_UGM3;
+}
 
 /* 风扇状态机 */
 typedef enum {
@@ -233,6 +267,8 @@ void StartSensorTask(void *argument) {
   MovingAvg_Init(&g_temp_filter, 25.0f);
   MovingAvg_Init(&g_humid_filter, 50.0f);
   MovingAvg_Init(&g_press_filter, 1013.0f);
+  MovingAvg_Init(&g_light_filter, ADC_ToLux(ADC_ToVoltage(2048)));
+  MovingAvg_Init(&g_pm25_filter, ADC_ToPM25(ADC_ToVoltage(2048)));
   
   for (;;) {
     /* 读取 BME280 */
@@ -250,31 +286,45 @@ void StartSensorTask(void *argument) {
     }
     
     /* 读取 ADC (光敏和 PM2.5) */
+    uint16_t adc_raw;
+    float voltage;
+    
     ADC_SelectChannel(ADC_CHANNEL_10);
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
-      sensor_data.light = HAL_ADC_GetValue(&hadc1);
+      adc_raw = HAL_ADC_GetValue(&hadc1);
+      voltage = ADC_ToVoltage(adc_raw);
+      sensor_data.light = ADC_ToLux(voltage);
       sensor_data.light_valid = true;
+      sensor_data.light_filtered = MovingAvg_Update(&g_light_filter, sensor_data.light);
     } else {
       sensor_data.light_valid = false;
+      sensor_data.light = 0.0f;
+      sensor_data.light_filtered = 0.0f;
     }
     HAL_ADC_Stop(&hadc1);
     
     ADC_SelectChannel(ADC_CHANNEL_12);
     HAL_ADC_Start(&hadc1);
     if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
-      sensor_data.pm25 = HAL_ADC_GetValue(&hadc1);
+      adc_raw = HAL_ADC_GetValue(&hadc1);
+      voltage = ADC_ToVoltage(adc_raw);
+      sensor_data.pm25 = ADC_ToPM25(voltage);
       sensor_data.pm25_valid = true;
+      sensor_data.pm25_filtered = MovingAvg_Update(&g_pm25_filter, sensor_data.pm25);
     } else {
       sensor_data.pm25_valid = false;
+      sensor_data.pm25 = 0.0f;
+      sensor_data.pm25_filtered = 0.0f;
     }
     HAL_ADC_Stop(&hadc1);
     
     /* 添加时间戳 */
     sensor_data.timestamp = osKernelGetTickCount();
     
-    /* 发送数据到队列 */
-    osMessageQueuePut(dataQueueHandle, &sensor_data, 0, 10);
+    /* 写入全局共享数据，广播给所有消费者 */
+    g_sensor_data = sensor_data;
+    osEventFlagsSet(sensorEventFlags, FLAG_NEW_DATA);
     
     WDT_TaskAlive(TASK_ID_SENSOR);
     
@@ -293,51 +343,55 @@ void StartLcdTask(void *argument) {
   LCD_DrawLine(10, 28, 310, 28, COLOR_GRAY);
   
   for (;;) {
-    /* 接收传感器数据 */
-    if (osMessageQueueGet(dataQueueHandle, &sensor_data, NULL, 100) == osOK) {
-      /* 显示温度 */
-      LCD_ShowString(10, 40, "Temp:", COLOR_WHITE, COLOR_BLACK, 16);
-      if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 40, sensor_data.temp_filtered, 2, COLOR_GREEN, COLOR_BLACK, 16);
-        LCD_ShowString(180, 40, "C", COLOR_WHITE, COLOR_BLACK, 16);
-      } else {
-        LCD_ShowString(80, 40, "---", COLOR_RED, COLOR_BLACK, 16);
-      }
-      
-      /* 显示湿度 */
-      LCD_ShowString(10, 60, "Humid:", COLOR_WHITE, COLOR_BLACK, 16);
-      if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 60, sensor_data.humid_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
-        LCD_ShowString(140, 60, "%", COLOR_WHITE, COLOR_BLACK, 16);
-      } else {
-        LCD_ShowString(80, 60, "---", COLOR_RED, COLOR_BLACK, 16);
-      }
-      
-      /* 显示气压 */
-      LCD_ShowString(10, 80, "Press:", COLOR_WHITE, COLOR_BLACK, 16);
-      if (sensor_data.bme280_valid) {
-        LCD_ShowFloat(80, 80, sensor_data.press_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
-        LCD_ShowString(180, 80, "hPa", COLOR_WHITE, COLOR_BLACK, 16);
-      } else {
-        LCD_ShowString(80, 80, "---", COLOR_RED, COLOR_BLACK, 16);
-      }
-      
-      /* 显示光敏 */
-      LCD_ShowString(10, 100, "Light:", COLOR_WHITE, COLOR_BLACK, 16);
-      if (sensor_data.light_valid) {
-        LCD_ShowNumber(80, 100, sensor_data.light, COLOR_YELLOW, COLOR_BLACK, 16);
-      } else {
-        LCD_ShowString(80, 100, "---", COLOR_RED, COLOR_BLACK, 16);
-      }
-      
-      /* 显示 PM2.5 */
-      LCD_ShowString(10, 120, "PM2.5:", COLOR_WHITE, COLOR_BLACK, 16);
-      if (sensor_data.pm25_valid) {
-        LCD_ShowNumber(80, 120, sensor_data.pm25, COLOR_YELLOW, COLOR_BLACK, 16);
-      } else {
-        LCD_ShowString(80, 120, "---", COLOR_RED, COLOR_BLACK, 16);
-      }
+    /* 等待新数据事件 */
+    osEventFlagsWait(sensorEventFlags, FLAG_NEW_DATA, osFlagsWaitAny, osWaitForever);
+    sensor_data = g_sensor_data;
+    
+    /* 显示温度 */
+    LCD_ShowString(10, 40, "Temp:", COLOR_WHITE, COLOR_BLACK, 16);
+    if (sensor_data.bme280_valid) {
+      LCD_ShowFloat(80, 40, sensor_data.temp_filtered, 2, COLOR_GREEN, COLOR_BLACK, 16);
+      LCD_ShowString(180, 40, "C", COLOR_WHITE, COLOR_BLACK, 16);
+    } else {
+      LCD_ShowString(80, 40, "---", COLOR_RED, COLOR_BLACK, 16);
     }
+    
+    /* 显示湿度 */
+    LCD_ShowString(10, 60, "Humid:", COLOR_WHITE, COLOR_BLACK, 16);
+    if (sensor_data.bme280_valid) {
+      LCD_ShowFloat(80, 60, sensor_data.humid_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
+      LCD_ShowString(140, 60, "%", COLOR_WHITE, COLOR_BLACK, 16);
+    } else {
+      LCD_ShowString(80, 60, "---", COLOR_RED, COLOR_BLACK, 16);
+    }
+    
+    /* 显示气压 */
+    LCD_ShowString(10, 80, "Press:", COLOR_WHITE, COLOR_BLACK, 16);
+    if (sensor_data.bme280_valid) {
+      LCD_ShowFloat(80, 80, sensor_data.press_filtered, 1, COLOR_GREEN, COLOR_BLACK, 16);
+      LCD_ShowString(180, 80, "hPa", COLOR_WHITE, COLOR_BLACK, 16);
+    } else {
+      LCD_ShowString(80, 80, "---", COLOR_RED, COLOR_BLACK, 16);
+    }
+    
+    /* 显示光敏 */
+    LCD_ShowString(10, 100, "Light:", COLOR_WHITE, COLOR_BLACK, 16);
+    if (sensor_data.light_valid) {
+      LCD_ShowNumber(80, 100, (uint16_t)sensor_data.light, COLOR_YELLOW, COLOR_BLACK, 16);
+      LCD_ShowString(120, 100, "lx", COLOR_WHITE, COLOR_BLACK, 16);
+    } else {
+      LCD_ShowString(80, 100, "---", COLOR_RED, COLOR_BLACK, 16);
+    }
+    
+    /* 显示 PM2.5 */
+    LCD_ShowString(10, 120, "PM2.5:", COLOR_WHITE, COLOR_BLACK, 16);
+    if (sensor_data.pm25_valid) {
+      LCD_ShowFloat(80, 120, sensor_data.pm25, 1, COLOR_YELLOW, COLOR_BLACK, 16);
+      LCD_ShowString(120, 120, "ug/m3", COLOR_WHITE, COLOR_BLACK, 16);
+    } else {
+      LCD_ShowString(80, 120, "---", COLOR_RED, COLOR_BLACK, 16);
+    }
+    
     WDT_TaskAlive(TASK_ID_LCD);
   }
 }
@@ -349,22 +403,24 @@ void StartUartTask(void *argument) {
   uint16_t len;
   
   for (;;) {
-    /* 接收传感器数据 */
-    if (osMessageQueueGet(dataQueueHandle, &sensor_data, NULL, 1000) == osOK) {
-      /* 格式化数据字符串 */
-      len = sprintf(buffer, "{\"temp\":%.2f,\"humid\":%.1f,\"press\":%.1f,\"light\":%d,\"pm25\":%d}\r\n",
-        sensor_data.temperature,
-        sensor_data.humidity,
-        sensor_data.pressure,
-        sensor_data.light,
-        sensor_data.pm25);
-      
-      /* 通过 UART2 发送 (HC05) */
-      HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, 100);
-      
-      /* 通过 UART1 发送 (调试) */
-      HAL_UART_Transmit(&huart1, (uint8_t *)buffer, len, 100);
-    }
+    /* 等待新数据事件 */
+    osEventFlagsWait(sensorEventFlags, FLAG_NEW_DATA, osFlagsWaitAny, osWaitForever);
+    sensor_data = g_sensor_data;
+    
+    /* 格式化数据字符串 */
+    len = sprintf(buffer, "{\"temp\":%.2f,\"humid\":%.1f,\"press\":%.1f,\"light\":%.0f,\"pm25\":%.1f}\r\n",
+      sensor_data.temperature,
+      sensor_data.humidity,
+      sensor_data.pressure,
+      sensor_data.light,
+      sensor_data.pm25);
+    
+    /* 通过 UART2 发送 (HC05) */
+    HAL_UART_Transmit(&huart2, (uint8_t *)buffer, len, 100);
+    
+    /* 通过 UART1 发送 (调试) */
+    HAL_UART_Transmit(&huart1, (uint8_t *)buffer, len, 100);
+    
     WDT_TaskAlive(TASK_ID_UART);
   }
 }
@@ -377,48 +433,49 @@ void StartFanTask(void *argument) {
   g_state_entry_time = osKernelGetTickCount();
   
   for (;;) {
-    /* 从队列接收传感器数据 */
-    if (osMessageQueueGet(dataQueueHandle, &sensor_data, NULL, 100) == osOK) {
-      /* 只有在自动模式下才执行温度控制 */
-      if (GetFanMode() == 0) {
-        /* 温度阈值控制 - 带迟滞的状态机 */
-        if (sensor_data.bme280_valid) {
-          float temp = sensor_data.temp_filtered;
-          uint32_t now = osKernelGetTickCount();
-          uint32_t elapsed = now - g_state_entry_time;
-          
-          next_state = g_fan_state;
-          
-          switch (g_fan_state) {
-            case FAN_IDLE:
-              if (temp > 28.0f)  next_state = FAN_LOW;
-              break;
-            case FAN_LOW:
-              if (temp > 32.0f)        next_state = FAN_MEDIUM;
-              else if (temp < 26.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_IDLE;
-              break;
-            case FAN_MEDIUM:
-              if (temp > 36.0f)        next_state = FAN_HIGH;
-              else if (temp < 30.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_LOW;
-              break;
-            case FAN_HIGH:
-              if (temp > 40.0f)        next_state = FAN_MAX;
-              else if (temp < 34.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_MEDIUM;
-              break;
-            case FAN_MAX:
-              if (temp < 38.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_HIGH;
-              break;
-          }
-          
-          if (next_state != g_fan_state) {
-            g_fan_state = next_state;
-            g_state_entry_time = now;
-          }
-          
-          int32_t speed = fan_state_to_speed(g_fan_state);
-          Motor_SetSpeedA(speed);
-          SetManualFanSpeed(speed);
+    /* 等待新数据事件 */
+    osEventFlagsWait(sensorEventFlags, FLAG_NEW_DATA, osFlagsWaitAny, osWaitForever);
+    sensor_data = g_sensor_data;
+    
+    /* 只有在自动模式下才执行温度控制 */
+    if (GetFanMode() == 0) {
+      /* 温度阈值控制 - 带迟滞的状态机 */
+      if (sensor_data.bme280_valid) {
+        float temp = sensor_data.temp_filtered;
+        uint32_t now = osKernelGetTickCount();
+        uint32_t elapsed = now - g_state_entry_time;
+        
+        next_state = g_fan_state;
+        
+        switch (g_fan_state) {
+          case FAN_IDLE:
+            if (temp > 28.0f)  next_state = FAN_LOW;
+            break;
+          case FAN_LOW:
+            if (temp > 32.0f)        next_state = FAN_MEDIUM;
+            else if (temp < 26.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_IDLE;
+            break;
+          case FAN_MEDIUM:
+            if (temp > 36.0f)        next_state = FAN_HIGH;
+            else if (temp < 30.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_LOW;
+            break;
+          case FAN_HIGH:
+            if (temp > 40.0f)        next_state = FAN_MAX;
+            else if (temp < 34.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_MEDIUM;
+            break;
+          case FAN_MAX:
+            if (temp < 38.0f && elapsed > FAN_HYSTERESIS_MS) next_state = FAN_HIGH;
+            break;
         }
+        
+        if (next_state != g_fan_state) {
+          g_fan_state = next_state;
+          g_state_entry_time = now;
+        }
+        
+        int32_t speed = fan_state_to_speed(g_fan_state);
+        Motor_SetSpeedA(speed);
+        SetManualFanSpeed(speed);
       }
     }
     WDT_TaskAlive(TASK_ID_FAN);
@@ -480,7 +537,7 @@ void StartCmdTask(void *argument) {
           break;
         }
         case CMD_GET_DATA: {
-          len = sprintf(response, "DATA: use dataQueue to get sensor data\r\n");
+          len = sprintf(response, "DATA: sensor data is broadcast via event flags\r\n");
           HAL_UART_Transmit(&huart2, (uint8_t *)response, len, 100);
           HAL_UART_Transmit(&huart1, (uint8_t *)response, len, 100);
           break;
