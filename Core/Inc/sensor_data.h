@@ -14,15 +14,17 @@ typedef struct {
     float temperature;    /* 温度 (°C) */
     float humidity;       /* 湿度 (%RH) */
     float pressure;       /* 气压 (hPa) */
-    uint16_t light;       /* 光敏电阻值 */
-    uint16_t pm25;        /* PM2.5 值 */
-    bool bme280_valid;    /* BME280 数据有效标志 */
-    bool light_valid;     /* 光敏数据有效标志 */
-    bool pm25_valid;      /* PM2.5 数据有效标志 */
-    uint32_t timestamp;   /* 时间戳 */
-    float temp_filtered;  /* 滤波后的温度 */
-    float humid_filtered; /* 滤波后的湿度 */
-    float press_filtered; /* 滤波后的气压 */
+    float light;         /* 光照强度 (lx) */
+    float pm25;          /* PM2.5 浓度 (μg/m³) */
+    bool bme280_valid;   /* BME280 数据有效标志 */
+    bool light_valid;    /* 光敏数据有效标志 */
+    bool pm25_valid;     /* PM2.5 数据有效标志 */
+    uint32_t timestamp;  /* 时间戳 */
+    float temp_filtered; /* 滤波后的温度 */
+    float humid_filtered;/* 滤波后的湿度 */
+    float press_filtered;/* 滤波后的气压 */
+    float light_filtered;/* 滤波后的光照 */
+    float pm25_filtered; /* 滤波后的PM2.5 */
 } SensorData_t;
 
 /* 命令类型 */

@@ -31,7 +31,8 @@
 | **USART2_RX** | PA3 | AF_PP | HC05 蓝牙接收 |
 | **ADC1_IN10** | PC0 | Analog | 光敏电阻 |
 | **ADC1_IN12** | PC2 | Analog | PM2.5 传感器 |
-| **TIM2_CH3** | PB10 | AF_PP | 电机 PWM (部分重映射) |
+| **TIM2_CH3** | PB10 | AF_PP | 电机A PWM |
+| **TIM2_CH4** | PB11 | AF_PP | 电机B PWM |
 | **AIN1** | PA0 | Output | 电机A方向1 |
 | **AIN2** | PA1 | Output | 电机A方向2 |
 | **BIN1** | PB0 | Output | 电机B方向1 |

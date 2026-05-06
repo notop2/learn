@@ -23,7 +23,7 @@ extern "C" {
 #define COLOR_YELLOW     0xFFE0
 #define COLOR_GRAY       0x8410
 
-/* LCD 命令定义 (假设是 ILI9341 或兼容芯片) */
+/* LCD 命令定义 */
 #define LCD_CMD_RESET    0x01
 #define LCD_CMD_SLEEP_IN 0x10
 #define LCD_CMD_SLEEP_OUT 0x11

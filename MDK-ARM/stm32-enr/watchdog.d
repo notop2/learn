@@ -35,5 +35,16 @@ stm32-enr\watchdog.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
 stm32-enr\watchdog.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h
 stm32-enr\watchdog.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h
 stm32-enr\watchdog.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
+stm32-enr\watchdog.o: ../Core/Inc/FreeRTOSConfig.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/projdefs.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/portable.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/deprecated_definitions.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM3/portmacro.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
+stm32-enr\watchdog.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
 stm32-enr\watchdog.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 stm32-enr\watchdog.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
