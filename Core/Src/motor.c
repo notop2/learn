@@ -14,8 +14,8 @@ void Motor_Init(void) {
     HAL_GPIO_WritePin(STBY_GPIO_Port, STBY_Pin, GPIO_PIN_SET);
     
     /* 启动 PWM */
-    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
     
     /* 初始化电机状态 */
     motor_a.speed = 0;
@@ -53,8 +53,8 @@ void Motor_SetSpeedA(int32_t speed) {
         motor_a.dir = MOTOR_STOP;
     }
     
-    /* 设置 PWM (假设 ARR=999, 频率为 72MHz/1000/100 = 720Hz) */
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, speed * 10);
+    /* 设置 PWM */
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, speed * 10);
 }
 
 /* 设置电机 B 速度 (-100 ~ 100) */
@@ -84,7 +84,7 @@ void Motor_SetSpeedB(int32_t speed) {
     }
     
     /* 设置 PWM */
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, speed * 10);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, speed * 10);
 }
 
 /* 停止电机 A */

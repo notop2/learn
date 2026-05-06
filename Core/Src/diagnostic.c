@@ -97,37 +97,45 @@ void DIAG_RunAll(DiagReport_t *report)
 
     uint32_t start = HAL_GetTick();
 
+    bool i2c_ok = DIAG_TestI2C();
     diag_set(report, 0, "I2C_BME280",
-        DIAG_TestI2C() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestI2C() ? "id=0x60" : "no device");
+        i2c_ok ? DIAG_PASS : DIAG_FAIL,
+        i2c_ok ? "id=0x60" : "no device");
 
+    bool adc_ok = DIAG_TestADC();
     diag_set(report, 1, "ADC",
-        DIAG_TestADC() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestADC() ? "conversion ok" : "timeout");
+        adc_ok ? DIAG_PASS : DIAG_FAIL,
+        adc_ok ? "conversion ok" : "timeout");
 
+    bool lcd_ok = DIAG_TestLCD();
     diag_set(report, 2, "LCD",
-        DIAG_TestLCD() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestLCD() ? "color test done" : "fsmc error");
+        lcd_ok ? DIAG_PASS : DIAG_FAIL,
+        lcd_ok ? "color test done" : "fsmc error");
 
+    bool uart_ok = DIAG_TestUART();
     diag_set(report, 3, "UART",
-        DIAG_TestUART() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestUART() ? "tx ok" : "tx failed");
+        uart_ok ? DIAG_PASS : DIAG_FAIL,
+        uart_ok ? "tx ok" : "tx failed");
 
+    bool motor_ok = DIAG_TestMotor();
     diag_set(report, 4, "MOTOR",
-        DIAG_TestMotor() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestMotor() ? "pwm ok" : "pwm error");
+        motor_ok ? DIAG_PASS : DIAG_FAIL,
+        motor_ok ? "pwm ok" : "pwm error");
 
+    bool fsmc_ok = DIAG_TestFSMC();
     diag_set(report, 5, "FSMC",
-        DIAG_TestFSMC() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestFSMC() ? "rw ok" : "readback fail");
+        fsmc_ok ? DIAG_PASS : DIAG_FAIL,
+        fsmc_ok ? "rw ok" : "readback fail");
 
+    bool sensor_ok = DIAG_TestSensor();
     diag_set(report, 6, "SENSOR",
-        DIAG_TestSensor() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestSensor() ? "data ok" : "read fail");
+        sensor_ok ? DIAG_PASS : DIAG_FAIL,
+        sensor_ok ? "data ok" : "read fail");
 
+    bool flash_ok = DIAG_TestFlash();
     diag_set(report, 7, "FLASH",
-        DIAG_TestFlash() ? DIAG_PASS : DIAG_FAIL,
-        DIAG_TestFlash() ? "param area ok" : "unexpected");
+        flash_ok ? DIAG_PASS : DIAG_FAIL,
+        flash_ok ? "param area ok" : "unexpected");
 
     report->total_ms = HAL_GetTick() - start;
 }
