@@ -258,7 +258,7 @@ static int32_t fan_state_to_speed(FanState_t state)
 
 /* 传感器任务：读取所有传感器数据 */
 void StartSensorTask(void *argument) {
-  SensorData_t sensor_data;
+  SensorData_t sensor_data = {0};
   
   /* 初始化传感器 */
   BME280_Init();
@@ -274,15 +274,11 @@ void StartSensorTask(void *argument) {
     /* 读取 BME280 */
     if (BME280_ReadData(&sensor_data.temperature, &sensor_data.humidity, &sensor_data.pressure) == HAL_OK) {
       sensor_data.bme280_valid = true;
-      /* 应用移动平均滤波 */
       sensor_data.temp_filtered = MovingAvg_Update(&g_temp_filter, sensor_data.temperature);
       sensor_data.humid_filtered = MovingAvg_Update(&g_humid_filter, sensor_data.humidity);
       sensor_data.press_filtered = MovingAvg_Update(&g_press_filter, sensor_data.pressure);
     } else {
       sensor_data.bme280_valid = false;
-      sensor_data.temp_filtered = sensor_data.temperature;
-      sensor_data.humid_filtered = sensor_data.humidity;
-      sensor_data.press_filtered = sensor_data.pressure;
     }
     
     /* 读取 ADC (光敏和 PM2.5) */
