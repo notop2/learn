@@ -4,8 +4,12 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifndef IWDG_KEY_RELOAD
 #define IWDG_KEY_RELOAD   0xAAAA
+#endif
+#ifndef IWDG_KEY_ENABLE
 #define IWDG_KEY_ENABLE   0xCCCC
+#endif
 #define IWDG_KEY_UNLOCK   0x5555
 
 static TaskWatchdog_t g_task_wd[TASK_ID_COUNT];
@@ -62,6 +66,8 @@ void WDT_CheckAllTasks(void)
             if (g_task_wd[i].deadline_misses >= 3 && g_task_wd[i].is_critical) {
                 while (1) { __disable_irq(); }
             }
+        } else {
+            g_task_wd[i].deadline_misses = 0;
         }
     }
 }
@@ -92,4 +98,25 @@ void WDT_PrintStatus(char *buf, uint16_t size)
             (unsigned long)elapsed,
             (unsigned long)g_task_wd[i].deadline_misses);
     }
+}
+
+uint8_t WDT_GetAliveMask(void)
+{
+    uint8_t mask = 0;
+    for (int i = 0; i < TASK_ID_COUNT && i < 8; i++) {
+        if (g_task_wd[i].name != NULL && WDT_IsTaskHealthy((TaskId_t)i)) {
+            mask |= (1 << i);
+        }
+    }
+    return mask;
+}
+
+uint8_t WDT_GetResetCount(void)
+{
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)) {
+        __HAL_RCC_CLEAR_RESET_FLAGS();
+        return 1;
+    }
+    __HAL_RCC_CLEAR_RESET_FLAGS();
+    return 0;
 }

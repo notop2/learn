@@ -6,15 +6,12 @@ extern "C" {
 #endif
 
 #include "main.h"
-#include "fsmc.h"
 #include <stdint.h>
 #include <stdbool.h>
 
-/* LCD 尺寸 */
 #define LCD_WIDTH    320
 #define LCD_HEIGHT   240
 
-/* 常用颜色定义 (RGB565) */
 #define COLOR_BLACK      0x0000
 #define COLOR_WHITE      0xFFFF
 #define COLOR_RED        0xF800
@@ -23,15 +20,6 @@ extern "C" {
 #define COLOR_YELLOW     0xFFE0
 #define COLOR_GRAY       0x8410
 
-/* LCD 命令定义 */
-#define LCD_CMD_RESET    0x01
-#define LCD_CMD_SLEEP_IN 0x10
-#define LCD_CMD_SLEEP_OUT 0x11
-#define LCD_CMD_MODE     0x3A
-#define LCD_CMD_WINDOW   0x2A
-#define LCD_CMD_MEMORY   0x2C
-
-/* 函数声明 */
 void LCD_Init(void);
 void LCD_Clear(uint16_t color);
 void LCD_SetPoint(uint16_t x, uint16_t y, uint16_t color);
@@ -47,4 +35,4 @@ void LCD_ShowFloat(uint16_t x, uint16_t y, float num, uint8_t decimals, uint16_t
 }
 #endif
 
-#endif /* __LCD_H */
+#endif

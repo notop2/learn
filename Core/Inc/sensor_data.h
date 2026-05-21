@@ -36,6 +36,9 @@ typedef enum {
     CMD_SET_FAN_MODE,     /* 设置风扇模式 (自动/手动) */
     CMD_GET_VERSION,      /* 获取固件版本 */
     CMD_DIAGNOSTIC,       /* 系统自检诊断 */
+    CMD_OTA_BEGIN,        /* 开始 OTA 升级 */
+    CMD_OTA_DATA,         /* OTA 固件数据分片 */
+    CMD_OTA_COMPLETE,     /* OTA 完成校验 */
     CMD_MAX
 } CommandType_t;
 
@@ -61,6 +64,16 @@ typedef struct {
         struct {
             uint8_t index; /* 数据索引 */
         } query;
+        struct {
+            uint32_t total_size;
+            uint32_t crc32;
+        } ota_begin;
+        struct {
+            uint32_t offset;
+        } ota_data;
+        struct {
+            uint32_t crc32;
+        } ota_complete;
         SystemStatus_t status;
         uint8_t raw[32];  /* 原始数据 */
     } data;

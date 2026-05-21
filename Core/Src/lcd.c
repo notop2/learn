@@ -3,14 +3,175 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* LCD 访问宏定义 */
-#define LCD_CMD_ADDR   (*((volatile uint16_t *)0x60000000))
-#define LCD_DATA_ADDR  (*((volatile uint16_t *)0x60020000))
+/* SPI2 引脚定义 */
+#define LCD_SPI           SPI2
+#define LCD_CS_PORT       GPIOD
+#define LCD_CS_PIN        GPIO_PIN_7
+#define LCD_DC_PORT       GPIOD
+#define LCD_DC_PIN        GPIO_PIN_4
+#define LCD_RST_PORT      GPIOD
+#define LCD_RST_PIN       GPIO_PIN_5
 
+#define LCD_CS_LOW()     HAL_GPIO_WritePin(LCD_CS_PORT, LCD_CS_PIN, GPIO_PIN_RESET)
+#define LCD_CS_HIGH()    HAL_GPIO_WritePin(LCD_CS_PORT, LCD_CS_PIN, GPIO_PIN_SET)
+#define LCD_DC_LOW()     HAL_GPIO_WritePin(LCD_DC_PORT, LCD_DC_PIN, GPIO_PIN_RESET)
+#define LCD_DC_HIGH()    HAL_GPIO_WritePin(LCD_DC_PORT, LCD_DC_PIN, GPIO_PIN_SET)
+#define LCD_RST_LOW()    HAL_GPIO_WritePin(LCD_RST_PORT, LCD_RST_PIN, GPIO_PIN_RESET)
+#define LCD_RST_HIGH()   HAL_GPIO_WritePin(LCD_RST_PORT, LCD_RST_PIN, GPIO_PIN_SET)
 
-// 8x16 ASCII 码字模数据（常用，可直接复制使用）
- //8*16 ASCII字符集
-static const uint8_t ascii8x16[][16]={
+static void SPI_WriteByte(uint8_t data)
+{
+    while (!(LCD_SPI->SR & SPI_SR_TXE));
+    LCD_SPI->DR = data;
+    while (LCD_SPI->SR & SPI_SR_BSY);
+}
+
+static void SPI_WriteWord(uint16_t data)
+{
+    SPI_WriteByte(data >> 8);
+    SPI_WriteByte(data & 0xFF);
+}
+
+static void LCD_WriteCmd(uint8_t cmd)
+{
+    LCD_CS_LOW();
+    LCD_DC_LOW();
+    SPI_WriteByte(cmd);
+    LCD_CS_HIGH();
+}
+
+static void LCD_WriteData(uint8_t data)
+{
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    SPI_WriteByte(data);
+    LCD_CS_HIGH();
+}
+
+static void LCD_WriteDataWord(uint16_t data)
+{
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    SPI_WriteWord(data);
+    LCD_CS_HIGH();
+}
+
+static void LCD_WriteDataBuf(const uint8_t *buf, uint32_t len)
+{
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    for (uint32_t i = 0; i < len; i++) {
+        SPI_WriteByte(buf[i]);
+    }
+    LCD_CS_HIGH();
+}
+
+static void SPI2_Init(void)
+{
+    __HAL_RCC_SPI2_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+
+    GPIO_InitTypeDef gpio = {0};
+
+    gpio.Pin = GPIO_PIN_13 | GPIO_PIN_15;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF5_SPI2;
+    HAL_GPIO_Init(GPIOB, &gpio);
+
+    gpio.Pin = LCD_CS_PIN | LCD_DC_PIN | LCD_RST_PIN;
+    gpio.Mode = GPIO_MODE_OUTPUT_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = 0;
+    HAL_GPIO_Init(GPIOD, &gpio);
+
+    LCD_CS_HIGH();
+    LCD_DC_HIGH();
+    LCD_RST_HIGH();
+
+    LCD_SPI->CR1 = 0;
+    LCD_SPI->CR1 = SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_BR_1 | SPI_CR1_MSTR | SPI_CR1_SPE;
+}
+
+static void LCD_SetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+{
+    uint16_t x2 = x + width - 1;
+    uint16_t y2 = y + height - 1;
+
+    LCD_WriteCmd(0x2A);
+    LCD_WriteData(x >> 8);   LCD_WriteData(x & 0xFF);
+    LCD_WriteData(x2 >> 8);  LCD_WriteData(x2 & 0xFF);
+
+    LCD_WriteCmd(0x2B);
+    LCD_WriteData(y >> 8);   LCD_WriteData(y & 0xFF);
+    LCD_WriteData(y2 >> 8);  LCD_WriteData(y2 & 0xFF);
+
+    LCD_WriteCmd(0x2C);
+}
+
+void LCD_Init(void)
+{
+    SPI2_Init();
+
+    LCD_RST_LOW();
+    HAL_Delay(10);
+    LCD_RST_HIGH();
+    HAL_Delay(120);
+
+    LCD_WriteCmd(0xCB); LCD_WriteData(0x39); LCD_WriteData(0x2C); LCD_WriteData(0x00); LCD_WriteData(0x34); LCD_WriteData(0x02);
+    LCD_WriteCmd(0xCF); LCD_WriteData(0x00); LCD_WriteData(0xC1); LCD_WriteData(0x30);
+    LCD_WriteCmd(0xE8); LCD_WriteData(0x85); LCD_WriteData(0x00); LCD_WriteData(0x78);
+    LCD_WriteCmd(0xEA); LCD_WriteData(0x00); LCD_WriteData(0x00);
+    LCD_WriteCmd(0xED); LCD_WriteData(0x64); LCD_WriteData(0x03); LCD_WriteData(0x12); LCD_WriteData(0x81);
+    LCD_WriteCmd(0xF7); LCD_WriteData(0x20);
+    LCD_WriteCmd(0xC0); LCD_WriteData(0x23);
+    LCD_WriteCmd(0xC1); LCD_WriteData(0x10);
+    LCD_WriteCmd(0xC5); LCD_WriteData(0x3E); LCD_WriteData(0x28);
+    LCD_WriteCmd(0xC7); LCD_WriteData(0x86);
+    LCD_WriteCmd(0x36); LCD_WriteData(0x48);
+    LCD_WriteCmd(0x3A); LCD_WriteData(0x55);
+    LCD_WriteCmd(0xB1); LCD_WriteData(0x00); LCD_WriteData(0x18);
+    LCD_WriteCmd(0xB6); LCD_WriteData(0x08); LCD_WriteData(0x82); LCD_WriteData(0x27);
+    LCD_WriteCmd(0xF2); LCD_WriteData(0x00);
+    LCD_WriteCmd(0x26); LCD_WriteData(0x01);
+
+    LCD_WriteCmd(0xE0);
+    uint8_t gamma_pos[] = { 0x0F,0x31,0x2B,0x0C,0x0E,0x08,0x4E,0xF1,0x37,0x07,0x10,0x03,0x0E,0x09,0x00 };
+    LCD_WriteDataBuf(gamma_pos, 15);
+
+    LCD_WriteCmd(0xE1);
+    uint8_t gamma_neg[] = { 0x00,0x0E,0x14,0x03,0x11,0x07,0x31,0xC1,0x48,0x08,0x0F,0x0C,0x31,0x36,0x0F };
+    LCD_WriteDataBuf(gamma_neg, 15);
+
+    LCD_WriteCmd(0x11);
+    HAL_Delay(120);
+    LCD_WriteCmd(0x29);
+}
+
+void LCD_Clear(uint16_t color)
+{
+    LCD_SetWindow(0, 0, LCD_WIDTH, LCD_HEIGHT);
+    uint8_t hi = color >> 8, lo = color & 0xFF;
+
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    for (uint32_t i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) {
+        SPI_WriteByte(hi);
+        SPI_WriteByte(lo);
+    }
+    LCD_CS_HIGH();
+}
+
+void LCD_SetPoint(uint16_t x, uint16_t y, uint16_t color)
+{
+    LCD_SetWindow(x, y, 1, 1);
+    LCD_WriteDataWord(color);
+}
+
+static const uint8_t ascii8x16[][16] = {
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 0x00,0x00,0x00,0x18,0x18,0x18,0x18,0x18,0x18,0x08,0x00,0x08,0x18,0x00,0x00,0x00,
 0x00,0x00,0x00,0x34,0x24,0x24,0x24,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -106,266 +267,108 @@ static const uint8_t ascii8x16[][16]={
 0x00,0x00,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,0x08,
 0x00,0x00,0x00,0x30,0x18,0x08,0x08,0x08,0x0c,0x0e,0x08,0x08,0x08,0x08,0x18,0x30,
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x71,0x4b,0x06,0x00,0x00,0x00,0x00,0x00,
-};  
+};
 
-/* 写入命令 */
-static inline void LCD_WriteCmd(uint16_t cmd) {
-    LCD_CMD_ADDR = cmd;
-}
-
-/* 写入数据 */
-static inline void LCD_WriteData(uint16_t data) {
-    LCD_DATA_ADDR = data;
-}
-
-/* 设置显示区域 */
-static void LCD_SetWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
-    uint16_t x2 = x + width - 1;
-    uint16_t y2 = y + height - 1;
-    
-    LCD_WriteCmd(0x2A);
-    LCD_WriteData(x >> 8);
-    LCD_WriteData(x & 0xFF);
-    LCD_WriteData(x2 >> 8);
-    LCD_WriteData(x2 & 0xFF);
-    
-    LCD_WriteCmd(0x2B);
-    LCD_WriteData(y >> 8);
-    LCD_WriteData(y & 0xFF);
-    LCD_WriteData(y2 >> 8);
-    LCD_WriteData(y2 & 0xFF);
-    
-    LCD_WriteCmd(0x2C);
-}
-
-/* LCD 初始化 */
-void LCD_Init(void) {
-    /* 简单的初始化序列  */
-    HAL_Delay(50);
-    
-    LCD_WriteCmd(0xCB);
-    LCD_WriteData(0x39);
-    LCD_WriteData(0x2C);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0x34);
-    LCD_WriteData(0x02);
-    
-    LCD_WriteCmd(0xCF);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0xC1);
-    LCD_WriteData(0x30);
-    
-    LCD_WriteCmd(0xE8);
-    LCD_WriteData(0x85);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0x78);
-    
-    LCD_WriteCmd(0xEA);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0x00);
-    
-    LCD_WriteCmd(0xED);
-    LCD_WriteData(0x64);
-    LCD_WriteData(0x03);
-    LCD_WriteData(0x12);
-    LCD_WriteData(0x81);
-    
-    LCD_WriteCmd(0xF7);
-    LCD_WriteData(0x20);
-    
-    LCD_WriteCmd(0xC0);
-    LCD_WriteData(0x23);
-    
-    LCD_WriteCmd(0xC1);
-    LCD_WriteData(0x10);
-    
-    LCD_WriteCmd(0xC5);
-    LCD_WriteData(0x3e);
-    LCD_WriteData(0x28);
-    
-    LCD_WriteCmd(0xC7);
-    LCD_WriteData(0x86);
-    
-    LCD_WriteCmd(0x36);
-    LCD_WriteData(0x48);
-    
-    LCD_WriteCmd(0x3A);
-    LCD_WriteData(0x55);
-    
-    LCD_WriteCmd(0xB1);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0x18);
-    
-    LCD_WriteCmd(0xB6);
-    LCD_WriteData(0x08);
-    LCD_WriteData(0x82);
-    LCD_WriteData(0x27);
-    
-    LCD_WriteCmd(0xF2);
-    LCD_WriteData(0x00);
-    
-    LCD_WriteCmd(0x26);
-    LCD_WriteData(0x01);
-    
-    LCD_WriteCmd(0xE0);
-    LCD_WriteData(0x0F);
-    LCD_WriteData(0x31);
-    LCD_WriteData(0x2B);
-    LCD_WriteData(0x0C);
-    LCD_WriteData(0x0E);
-    LCD_WriteData(0x08);
-    LCD_WriteData(0x4E);
-    LCD_WriteData(0xF1);
-    LCD_WriteData(0x37);
-    LCD_WriteData(0x07);
-    LCD_WriteData(0x10);
-    LCD_WriteData(0x03);
-    LCD_WriteData(0x0E);
-    LCD_WriteData(0x09);
-    LCD_WriteData(0x00);
-    
-    LCD_WriteCmd(0xE1);
-    LCD_WriteData(0x00);
-    LCD_WriteData(0x0E);
-    LCD_WriteData(0x14);
-    LCD_WriteData(0x03);
-    LCD_WriteData(0x11);
-    LCD_WriteData(0x07);
-    LCD_WriteData(0x31);
-    LCD_WriteData(0xC1);
-    LCD_WriteData(0x48);
-    LCD_WriteData(0x08);
-    LCD_WriteData(0x0F);
-    LCD_WriteData(0x0C);
-    LCD_WriteData(0x31);
-    LCD_WriteData(0x36);
-    LCD_WriteData(0x0F);
-    
-    LCD_WriteCmd(0x11);
-    HAL_Delay(120);
-    
-    LCD_WriteCmd(0x29);
-}
-
-/* 清屏 */
-void LCD_Clear(uint16_t color) {
-    LCD_SetWindow(0, 0, LCD_WIDTH, LCD_HEIGHT);
-    
-    for (uint32_t i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) {
-        LCD_WriteData(color);
-    }
-}
-
-/* 画点 */
-void LCD_SetPoint(uint16_t x, uint16_t y, uint16_t color) {
-    LCD_SetWindow(x, y, 1, 1);
-    LCD_WriteData(color);
-}
-
-/* 画线 */
-void LCD_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color) {
-    int dx, dy, sx, sy, err, e2;
-    
-    dx = abs((int)x2 - (int)x1);
-    dy = abs((int)y2 - (int)y1);
-    sx = x1 < x2 ? 1 : -1;
-    sy = y1 < y2 ? 1 : -1;
-    err = (dx > dy ? dx : -dy) / 2;
-    
-    while (1) {
+void LCD_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color)
+{
+    int16_t dx = (x2 > x1) ? (x2 - x1) : (x1 - x2);
+    int16_t dy = (y2 > y1) ? (y2 - y1) : (y1 - y2);
+    int16_t sx = (x2 >= x1) ? 1 : -1;
+    int16_t sy = (y2 >= y1) ? 1 : -1;
+    int16_t err = dx - dy;
+    LCD_SetPoint(x1, y1, color);
+    while (x1 != x2 || y1 != y2) {
+        int16_t e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; x1 += sx; }
+        if (e2 < dx)  { err += dx; y1 += sy; }
         LCD_SetPoint(x1, y1, color);
-        
-        if (x1 == x2 && y1 == y2) break;
-        
-        e2 = err;
-        if (e2 > -dx) { err -= dy; x1 += sx; }
-        if (e2 < dy) { err += dx; y1 += sy; }
     }
 }
 
-/* 画矩形 */
-void LCD_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
+void LCD_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
     LCD_DrawLine(x, y, x + width - 1, y, color);
     LCD_DrawLine(x, y + height - 1, x + width - 1, y + height - 1, color);
     LCD_DrawLine(x, y, x, y + height - 1, color);
     LCD_DrawLine(x + width - 1, y, x + width - 1, y + height - 1, color);
 }
 
-/* 填充矩形 */
-void LCD_FillRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
+void LCD_FillRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
     LCD_SetWindow(x, y, width, height);
-    
-    for (uint32_t i = 0; i < width * height; i++) {
-        LCD_WriteData(color);
+    uint8_t hi = color >> 8, lo = color & 0xFF;
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    for (uint32_t i = 0; i < (uint32_t)width * height; i++) {
+        SPI_WriteByte(hi);
+        SPI_WriteByte(lo);
     }
+    LCD_CS_HIGH();
 }
 
-/* 画字符 (简化版) */
-void LCD_DrawChar(uint16_t x, uint16_t y, char ch, uint16_t color, uint16_t bg_color, uint8_t size) {
-    uint8_t temp;
-    uint16_t y0 = y;
-    
-    if (ch > 127) ch = '?';
-    ch -= ' ';
-    
-    for (uint8_t t = 0; t < 16; t++) {
-        temp = ascii8x16[ch][t];
-        for (uint8_t t2 = 0; t2 < 8; t2++) {
-            if (temp & 0x80) {
-                LCD_SetPoint(x, y, color);
+void LCD_DrawChar(uint16_t x, uint16_t y, char ch, uint16_t color, uint16_t bg_color, uint8_t size)
+{
+    if (ch < 32 || ch > 126) return;
+    ch -= 32;
+
+    for (uint8_t row = 0; row < 16; row++) {
+        uint8_t line = ascii8x16[(uint8_t)ch][row];
+        for (uint8_t col = 0; col < 8; col++) {
+            if (line & (0x80 >> col)) {
+                LCD_FillRectangle(x + col * size, y + row * size, size, size, color);
             } else {
-                LCD_SetPoint(x, y, bg_color);
+                LCD_FillRectangle(x + col * size, y + row * size, size, size, bg_color);
             }
-            temp <<= 1;
-            y++;
         }
-        y = y0;
-        x++;
     }
 }
 
-/* 显示字符串 */
-void LCD_ShowString(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg_color, uint8_t size) {
+static uint32_t LCD_DrawCharFast(uint16_t x, uint16_t y, char ch, uint16_t color, uint16_t bg_color, uint8_t size)
+{
+    if (ch < 32 || ch > 126) return 0;
+    ch -= 32;
+    uint16_t cw = 8 * size, ch_h = 16 * size;
+    LCD_SetWindow(x, y, cw, ch_h);
+    uint8_t hi_c = color >> 8, lo_c = color & 0xFF;
+    uint8_t hi_b = bg_color >> 8, lo_b = bg_color & 0xFF;
+
+    LCD_CS_LOW();
+    LCD_DC_HIGH();
+    for (uint8_t row = 0; row < 16; row++) {
+        uint8_t line = ascii8x16[(uint8_t)ch][row];
+        for (uint8_t s = 0; s < size; s++) {
+            for (uint8_t col = 0; col < 8; col++) {
+                uint8_t hi = (line & (0x80 >> col)) ? hi_c : hi_b;
+                uint8_t lo = (line & (0x80 >> col)) ? lo_c : lo_b;
+                for (uint8_t r = 0; r < size; r++) {
+                    SPI_WriteByte(hi);
+                    SPI_WriteByte(lo);
+                }
+            }
+        }
+    }
+    LCD_CS_HIGH();
+    return cw;
+}
+
+void LCD_ShowString(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg_color, uint8_t size)
+{
     while (*str) {
-        LCD_DrawChar(x, y, *str, color, bg_color, size);
-        x += 8;
-        if (x > LCD_WIDTH - 8) {
-            x = 0;
-            y += 16;
-        }
-        str++;
+        x += LCD_DrawCharFast(x, y, *str++, color, bg_color, size);
+        if (x + 8 * size >= LCD_WIDTH) { x = 0; y += 16 * size; }
     }
 }
 
-/* 显示数字 */
-void LCD_ShowNumber(uint16_t x, uint16_t y, int32_t num, uint16_t color, uint16_t bg_color, uint8_t size) {
+void LCD_ShowNumber(uint16_t x, uint16_t y, int32_t num, uint16_t color, uint16_t bg_color, uint8_t size)
+{
     char buf[16];
-    int len = 0;
-    
-    if (num < 0) {
-        LCD_DrawChar(x, y, '-', color, bg_color, size);
-        x += 8;
-        num = -num;
-    }
-    
-    if (num == 0) {
-        buf[len++] = '0';
-    } else {
-        while (num > 0) {
-            buf[len++] = '0' + (num % 10);
-            num /= 10;
-        }
-    }
-    
-    for (int i = len - 1; i >= 0; i--) {
-        LCD_DrawChar(x, y, buf[i], color, bg_color, size);
-        x += 8;
-    }
+    snprintf(buf, sizeof(buf), "%ld", (long)num);
+    LCD_ShowString(x, y, buf, color, bg_color, size);
 }
 
-/* 显示浮点数 */
-void LCD_ShowFloat(uint16_t x, uint16_t y, float num, uint8_t decimals, uint16_t color, uint16_t bg_color, uint8_t size) {
-    char buf[32];
-    sprintf(buf, "%.*f", decimals, num);
+void LCD_ShowFloat(uint16_t x, uint16_t y, float num, uint8_t decimals, uint16_t color, uint16_t bg_color, uint8_t size)
+{
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%.*f", decimals, num);
     LCD_ShowString(x, y, buf, color, bg_color, size);
 }

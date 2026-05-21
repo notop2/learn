@@ -2,8 +2,13 @@
 #include "main.h"
 #include <string.h>
 
-#define FLASH_PARAM_ADDR    0x0807F800
+#define FLASH_PARAM_ADDR    0x080E0000
 
+/* 缓存上次写入的参数，数据未变时不重复擦写以保护 Flash 寿命 */
+static SystemParams_t g_last_saved;
+static bool g_cache_valid = false;
+
+/* CRC16 (Modbus) 校验 */
 uint16_t STORAGE_CalcCRC(const uint8_t *data, uint32_t len)
 {
     uint16_t crc = 0xFFFF;
@@ -20,6 +25,7 @@ uint16_t STORAGE_CalcCRC(const uint8_t *data, uint32_t len)
     return crc;
 }
 
+/* 使用默认值填充参数结构体 */
 void STORAGE_SetDefaults(SystemParams_t *params)
 {
     memset(params, 0, sizeof(SystemParams_t));
@@ -37,6 +43,7 @@ void STORAGE_SetDefaults(SystemParams_t *params)
     params->crc = STORAGE_CalcCRC(p, sizeof(SystemParams_t));
 }
 
+/* 从 Flash 加载参数，校验失败则回退到默认值 */
 bool STORAGE_Load(SystemParams_t *params)
 {
     uint32_t *src = (uint32_t *)FLASH_PARAM_ADDR;
@@ -58,20 +65,30 @@ bool STORAGE_Load(SystemParams_t *params)
     }
 
     params->crc = saved_crc;
+
+    g_last_saved = *params;
+    g_cache_valid = true;
+
     return true;
 }
 
+/* 保存参数到 Flash，数据未变时跳过写入以减少磨损 */
 bool STORAGE_Save(const SystemParams_t *params)
 {
+    if (g_cache_valid && memcmp(params, &g_last_saved, sizeof(SystemParams_t)) == 0) {
+        return true;
+    }
+
     uint32_t erase_addr = FLASH_PARAM_ADDR;
     uint32_t page_error = 0;
 
     HAL_FLASH_Unlock();
 
     FLASH_EraseInitTypeDef erase = {
-        .TypeErase = FLASH_TYPEERASE_PAGES,
-        .PageAddress = erase_addr,
-        .NbPages = 1
+        .TypeErase = FLASH_TYPEERASE_SECTORS,
+        .Sector = 7,
+        .NbSectors = 1,
+        .VoltageRange = FLASH_VOLTAGE_RANGE_3
     };
 
     if (HAL_FLASHEx_Erase(&erase, &page_error) != HAL_OK) {
@@ -93,5 +110,9 @@ bool STORAGE_Save(const SystemParams_t *params)
     }
 
     HAL_FLASH_Lock();
+
+    g_last_saved = temp;
+    g_cache_valid = true;
+
     return true;
 }

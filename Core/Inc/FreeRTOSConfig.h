@@ -52,7 +52,7 @@
   extern uint32_t SystemCoreClock;
 #endif
 #ifndef CMSIS_device_header
-#define CMSIS_device_header "stm32f1xx.h"
+#define CMSIS_device_header "stm32f4xx.h"
 #endif /* CMSIS_device_header */
 
 #define configUSE_PREEMPTION                     1

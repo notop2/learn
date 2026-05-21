@@ -27,6 +27,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <stdbool.h>
 
 /* USER CODE BEGIN Includes */
 
@@ -45,6 +46,7 @@ void MX_USART2_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 void UART2_DMA_Init(void);
+bool HC05_SoftInit(void);
 uint8_t GetFanMode(void);
 int32_t GetManualFanSpeed(void);
 void SetFanMode(uint8_t mode);

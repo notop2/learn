@@ -11,7 +11,10 @@ extern "C" {
 #define TASK_WATCHDOG_TIMEOUT_MS  5000
 
 typedef enum {
-    TASK_ID_SENSOR = 0,
+    TASK_ID_BME280 = 0,
+    TASK_ID_LIGHT,
+    TASK_ID_PM25,
+    TASK_ID_DISTRIBUTOR,
     TASK_ID_LCD,
     TASK_ID_UART,
     TASK_ID_CMD,
@@ -37,6 +40,8 @@ void WDT_CheckAllTasks(void);
 uint32_t WDT_GetTaskMisses(TaskId_t id);
 bool WDT_IsTaskHealthy(TaskId_t id);
 void WDT_PrintStatus(char *buf, uint16_t size);
+uint8_t WDT_GetAliveMask(void);
+uint8_t WDT_GetResetCount(void);
 
 #ifdef __cplusplus
 }
